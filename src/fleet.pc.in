@@ -3,11 +3,10 @@ exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 sharedir=${prefix}/share
-sphinxdir=${sharedir}/doc/APPNAME/html
 
-Name: APPNAME
-Description: FILL_THIS_IN
+Name: Fleet
+Description: Fast and lightweight user-level threading and channels
 Version: @VERSION@
-URL: FILL_THIS_IN
-Libs: -L${libdir} -lAPPNAME
+URL: https://github.com/redjack/fleet/
+Libs: -L${libdir} -lfleet
 Cflags: -I${includedir}

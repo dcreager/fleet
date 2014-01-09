@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 # ----------------------------------------------------------------------
-# Copyright © 2011, RedJack, LLC.
+# Copyright © 2011-2014, RedJack, LLC.
 # All rights reserved.
 #
-# Please see the LICENSE.txt file in this distribution for license
-# details.
+# Please see the COPYING file in this distribution for license details.
 # ----------------------------------------------------------------------
 
 include_directories(../include)
@@ -12,8 +11,8 @@ include_directories(../include)
 #-----------------------------------------------------------------------
 # Build the library
 
-set(LIBAPPNAME_SRC
-    libappname/foo.c
+set(LIBFLEET_SRC
+    libfleet/foo.c
 )
 
 # Update the VERSION and SOVERSION properties below according to the following
@@ -42,21 +41,20 @@ set(LIBAPPNAME_SRC
 #
 # [1] http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html#Updating-version-info
 
-add_library(libappname SHARED ${LIBAPPNAME_SRC})
-set_target_properties(libappname PROPERTIES
-    OUTPUT_NAME appname
+add_library(libfleet SHARED ${LIBFLEET_SRC})
+set_target_properties(libfleet PROPERTIES
+    OUTPUT_NAME fleet
     VERSION 0.0.0
     SOVERSION 0)
-target_link_libraries(libappname
-    ${CORK_LIBRARIES}
+target_link_libraries(libfleet
 )
 
-install(TARGETS libappname DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS libfleet DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 #-----------------------------------------------------------------------
 # Generate the pkg-config file
 
 set(prefix ${CMAKE_INSTALL_PREFIX})
-configure_file(appname.pc.in ${CMAKE_CURRENT_BINARY_DIR}/appname.pc @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/appname.pc
+configure_file(fleet.pc.in ${CMAKE_CURRENT_BINARY_DIR}/fleet.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fleet.pc
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)

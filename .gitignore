@@ -2,10 +2,9 @@
 /.build/
 
 RELEASE-VERSION
-APPNAME.pc
 
-/APPNAME*.tar.gz
-/APPNAME*.tar.bz2
+/fleet*.tar.gz
+/fleet*.tar.bz2
 
 *.[oa]
 *.os

@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 # ----------------------------------------------------------------------
-# Copyright © 2011-2013, RedJack, LLC.
+# Copyright © 2011-2014, RedJack, LLC.
 # All rights reserved.
 #
-# Please see the LICENSE.txt file in this distribution for license
-# details.
+# Please see the COPYING file in this distribution for license details.
 # ----------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 2.6)
-set(PROJECT_NAME APPNAME)
-set(RELEASE_DATE 2013-06-01)
+set(PROJECT_NAME Fleet)
+set(RELEASE_DATE 2014-01-01)
 project(${PROJECT_NAME})
 enable_testing()
 
@@ -57,13 +56,6 @@ if(DEFINED ENV{TILERA_ROOT})
 endif()
 
 #-----------------------------------------------------------------------
-# Check for prerequisite libraries
-
-pkg_check_modules(CORK REQUIRED libcork)
-include_directories(${CORK_INCLUDE_DIRS})
-link_directories(${CORK_LIBRARY_DIRS})
-
-#-----------------------------------------------------------------------
 # Set some options
 
 if(APPLE)
@@ -94,6 +86,5 @@ endif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 
 add_subdirectory(docs)
 add_subdirectory(include)
-add_subdirectory(share)
 add_subdirectory(src)
 add_subdirectory(tests)
