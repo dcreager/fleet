@@ -1,0 +1,71 @@
+% flt_local(3)
+
+# NAME
+
+flt_local -- Context-local storage
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| **struct flt_local**;
+|
+| typedef void \*
+| (**flt_local_new_f**)(struct flt \**flt*, void \**ud*);
+|
+| typedef void
+| (**flt_local_free_f**)(struct flt \**flt*, void \**ud*, void \**instance*);
+|
+| struct flt_local \*
+| **flt_local_new**(struct flt \**flt*, void \**ud*,
+|               flt_local_new_f \**new_instance*,
+|               flt_local_free_f \**free_instance*);
+|
+| void
+| **flt_local_free**(struct flt_local \**local*);
+|
+| void \*
+| **flt_local_get**(struct flt_local \**local*, struct flt \**flt*);
+
+
+# DESCRIPTION
+
+The **flt_local** API is analogous to thread-local storage (TLS) in a
+traditional threaded application.  It allows you to have a distinct instance of
+a particular data type for each execution context in a fleet.  You provide
+callback functions that can allocate and deallocate an individual instance; the
+**flt_local** manager is then responsible for the actual life cycle of the
+instances, and for providing the instance associated with a particular execution
+context.
+
+**flt_local_new**() creates a new **flt_local** manager.  This new manager will
+use *new_instance* and *free_instance* to allocate and deallocate the data
+instances that it manages.  It will ensure that there is one instance for each
+execution context of the fleet that *flt* belongs to.
+
+**flt_local_free**() frees an **flt_local** manager, and any instances that it
+has created.  If the manager is shared among multiple tasks, you must ensure
+that only one of them frees it, and only does so when all of the other tasks are
+done using it.
+
+**flt_local_get**() returns the data instance for a particular execution
+context.
+
+The manager is allowed to instantiate the data instances lazily --- i.e., to
+wait to create an instance until **flt_local_get**() is called for the first
+time for a particular execution context.
+
+Note that your allocation function is given a pointer to the **flt**(3) instance
+that it belongs to, in case you need to store this somewhere in your data
+structure.
+
+
+# RETURN VALUES
+
+**flt_local_new**() will always return a valid new **flt_local** manager.
+
+Your **flt_local_new_f** callback should always return a valid data instance.
+If it returns `NULL`, this will be returned as the result of
+**flt_local_get**(); however, if you then call **flt_local_get**() another time
+for the same execution context, we will try to allocate a data instance again,
+by calling the callback an additional time.

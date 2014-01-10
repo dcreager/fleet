@@ -19,6 +19,7 @@ set(MAN_FOOTER "Fleet")
 set(MAN_PAGES
     flt.3
     flt_fleet.3
+    flt_local.3
     flt_run.3
     flt_task.3
     fleet.7
