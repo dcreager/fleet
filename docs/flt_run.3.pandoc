@@ -18,8 +18,8 @@ flt_run -- Scheduling tasks
 |
 | void
 | **flt_then**(struct flt \**flt*,
-|          flt_task \**first*, void \**u1*, void \**u2*, void \**u3*, void \**u4*,
-|          flt_task \**second*, void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+|          flt_task \**first*, void \**fu1*, void \**fu2*, void \**fu3*, void \**fu4*,
+|          flt_task \**second*, void \**su1*, void \**su2*, void \**su3*, void \**su4*);
 
 
 # DESCRIPTION

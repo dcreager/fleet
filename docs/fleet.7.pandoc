@@ -24,6 +24,6 @@ low-level task scheduling API.  The primary example is **flt_local**(3), which
 is the task equivalent of thread-local storage.
 
 Lastly, fleet uses these tools to provide several built-in higher-level
-abstractions.  In particular the **flt_channel**(3) API provides CSP-level
+abstractions.  In particular the **flt_channel**(3) API provides CSP-like
 communications channels between tasks, and the **flt_pool**(3) API provides
 task-aware memory management.
