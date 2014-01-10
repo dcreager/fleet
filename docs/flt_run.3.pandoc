@@ -1,0 +1,108 @@
+% flt_run(3)
+
+# NAME
+
+flt_run -- Scheduling tasks
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| void
+| **flt_run**(struct flt \**flt*, flt_task \**task*,
+|         void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+|
+| void
+| **flt_return_to**(struct flt \**flt*, flt_task \**task*,
+|               void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+|
+| void
+| **flt_then**(struct flt \**flt*,
+|          flt_task \**first*, void \**u1*, void \**u2*, void \**u3*, void \**u4*,
+|          flt_task \**second*, void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+
+
+# DESCRIPTION
+
+The **flt_run** family of functions let you schedule a new task to be run.  All
+of these functions take a **flt**(3) instance as their first parameter.
+However, there's no way to allocate your own **flt**(3) instance; you only
+obtain one when a task function is executed.  That means that these functions
+can only be called from within an already running task.  (Use
+**flt_fleet_run**(3) to start the initial "root" task for a fleet.)
+
+**flt_run**() is the simplest function.  It gives you no control over when or
+where the new task is executed; however, this gives the underlying fleet the
+most flexibility in executing tasks in parallel.  You should only use the more
+complex variants if you really need the extra constraints that they impose.
+
+**flt_return_to**() is a more efficient version of **flt_run**() that can only
+be used as the last statement of a parent task.  (It can be anywhere in the
+parent task's function body, but must be used in a `return` statement to
+indicate that it's the last statement the parent task will execute.)  For
+example:
+
+    static flt_task  child_task;
+    static flt_task  parent_task;
+
+    static void
+    parent_task(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+    {
+        if (child_should_handle_work_instead) {
+            return flt_return_to(flt, child_task, u1, u2, u3, u4);
+        } else {
+            /* do some work */
+        }
+    }
+
+On some platforms, this will automatically pass control to the child task
+without passing through the fleet's scheduler first.  However, this is an
+optional optimization; like with **flt_run**(), we don't make any guarantees
+about when or where the child task will be executed.
+
+**flt_then**() schedules both *first* and *second*, but doesn't allow *second*
+to execute until *first* finishes.  This is your primary low-level mechanism for
+enforcing "executes after" relationships between tasks.
+
+For all of these functions, you must ensure that any *uX* input parameters
+remain valid until the task has a chance to run.  Effectively, this means that
+the responsibility for freeing the inputs belongs to the new task, or to some
+subtask that it creates.
+
+Note that all of these functions are allowed to return before the newly
+scheduled child task starts to execute.  There isn't any way for the parent task
+to wait for newly scheduled child tasks to start or complete.  If you need to
+know when the child task completes, you must use **flt_then**() to schedule a
+*second* child task, which will be executed when the first one finishes.
+
+## Data sharing
+
+We don't place any restrictions on which particular values you pass in for the
+*uX* parameters for your tasks.  However, for the most part, we also don't make
+any guarantees about when or where a particular task is going to run.  That
+means that if you pass a pointer to a shared data instance to two tasks, it's
+entirely possible for those two tasks to execute simultaneously, in separate
+native OS threads.
+
+If the tasks only **read** from the shared data, then everything is fine.  The
+shared data is never changed or updated, and so it doesn't matter when or where
+each task reads the data.  (The only wrinkle is that you must ensure that the
+data isn't freed until all of the tasks that use the data have finished.)
+
+If one or more of the tasks need to **write** to the shared data, the story is
+different.  You must ensure that it's not possible for there to be any
+read/write or write/write conflicts.  Fleet does not provide any portable thread
+synchronization primitives, so there are two ways you can accomplish this.
+
+The first is to use **flt_return_to**() to schedule a new task.  This function
+must be the last statement the parent task executes, so it's safe for the parent
+to pass any of its *uX* parameters on to the new child task: anything the parent
+does to the data must happen *before* the **flt_return_to**() call, and
+everything the child does to the data must happen *after*.  So this data sharing
+pattern is safe.
+
+The other exception is when you use **flt_then**() to ensure that a *first* task
+finishes before a *second* task starts.  In this case, it's safe to share data
+between those two tasks, since the scheduler guarantees that the two tasks can't
+possibly execute at the same time, and so they can't possibly access the shared
+data simultaneously.

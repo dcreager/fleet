@@ -1,0 +1,27 @@
+.TH "flt" "3" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+flt \[en] Execution contexts
+.PP
+\f[B]struct flt\f[];
+.SH DESCRIPTION
+.PP
+An \f[B]flt\f[] instance represents an execution context that tasks can
+run in.
+An execution context is not a native OS thread; it simply represents the
+ability to run a task.
+The scheduler of the underlying \f[B]flt_fleet\f[](3) instance decides
+how to map tasks to execution contexts, and execution contexts to native
+threads.
+.PP
+Note that it's not possible to create an \f[B]flt\f[] instance directly;
+they are created internally when you create a fleet using
+\f[B]flt_fleet_new\f[](3).
+They are only available inside the body of an executing task; the
+\f[B]flt\f[] instance for the context that runs the task will be passed
+as the first parameter to the task's \f[B]flt_task\f[](3) function.
+.PP
+There's also no way to interrogate any of the execution context's
+internal state; the main thing that you can do with an execution context
+is ask it schedule additional tasks, via the \f[B]flt_run\f[](3) family
+of functions.

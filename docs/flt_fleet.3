@@ -1,0 +1,62 @@
+.TH "flt_fleet" "3" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+flt_fleet \[en] Fleets of tasks
+.SH SYNOPSIS
+.PP
+\f[B]#include <fleet.h>\f[]
+.PP
+\f[B]struct flt_fleet\f[];
+.PP
+struct flt_fleet *
+.PD 0
+.P
+.PD
+\f[B]flt_fleet_new\f[](void);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_fleet_free\f[](struct flt_fleet *\f[I]fleet\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_fleet_run\f[](struct flt_fleet *\f[I]fleet\f[], flt_task
+*\f[I]task\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void *\f[I]u2\f[], void
+*\f[I]u3\f[], void *\f[I]v4\f[]);
+.SH DESCRIPTION
+.PP
+A \f[I]fleet\f[] is the top\-level container for all of the tasks in a
+particular application.
+It consists of a collection of \f[I]execution contexts\f[] (each
+represented by a \f[B]flt\f[](3) instance) that will execute the
+application's tasks.
+(Note that these execution contexts do not correspond directly to native
+OS threads; see \f[B]flt\f[](3) for details.)
+.PP
+\f[B]flt_fleet_new\f[]() creates a new fleet, while
+\f[B]flt_fleet_free\f[]() frees a fleet.
+.PP
+\f[B]flt_fleet_run\f[]() runs a \[lq]root\[rq] task within
+\f[I]fleet\f[].
+This task can create other tasks, as needed.
+\f[B]flt_fleet_run\f[]() will not return until the root task, and all of
+the child tasks that it creates, have finished.
+As with all tasks, you can use the \f[I]uX\f[] parameters to pass data
+into the task.
+.PP
+You should not try to access the \f[B]flt_fleet\f[] instance from within
+any of the tasks that it runs.
+In particular, you should not try to free the fleet from within a task;
+you should wait until \f[B]flt_fleet_run\f[]() returns, and free the
+fleet then.
+.SH RETURN VALUES
+.PP
+\f[B]flt_fleet_new\f[]() will always return a valid new fleet object.

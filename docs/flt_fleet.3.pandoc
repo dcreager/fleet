@@ -1,0 +1,48 @@
+% flt_fleet(3)
+
+# NAME
+
+flt_fleet -- Fleets of tasks
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| **struct flt_fleet**;
+|
+| struct flt_fleet \*
+| **flt_fleet_new**(void);
+|
+| void
+| **flt_fleet_free**(struct flt_fleet \**fleet*);
+|
+| void
+| **flt_fleet_run**(struct flt_fleet \**fleet*, flt_task \**task*,
+|               void \**u1*, void \**u2*, void \**u3*, void \**v4*);
+
+
+# DESCRIPTION
+
+A *fleet* is the top-level container for all of the tasks in a particular
+application.  It consists of a collection of *execution contexts* (each
+represented by a **flt**(3) instance) that will execute the application's tasks.
+(Note that these execution contexts do not correspond directly to native OS
+threads; see **flt**(3) for details.)
+
+**flt_fleet_new**() creates a new fleet, while **flt_fleet_free**() frees a
+fleet.
+
+**flt_fleet_run**() runs a "root" task within *fleet*.  This task can create
+other tasks, as needed.  **flt_fleet_run**() will not return until the root
+task, and all of the child tasks that it creates, have finished.  As with all
+tasks, you can use the *uX* parameters to pass data into the task.
+
+You should not try to access the **flt_fleet** instance from within any of the
+tasks that it runs.  In particular, you should not try to free the fleet from
+within a task; you should wait until **flt_fleet_run**() returns, and free the
+fleet then.
+
+
+# RETURN VALUES
+
+**flt_fleet_new**() will always return a valid new fleet object.

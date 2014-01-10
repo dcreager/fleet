@@ -1,0 +1,25 @@
+% flt(3)
+
+# NAME
+
+flt -- Execution contexts
+
+| **struct flt**;
+
+# DESCRIPTION
+
+An **flt** instance represents an execution context that tasks can run in.  An
+execution context is not a native OS thread; it simply represents the ability to
+run a task.  The scheduler of the underlying **flt_fleet**(3) instance decides
+how to map tasks to execution contexts, and execution contexts to native
+threads.
+
+Note that it's not possible to create an **flt** instance directly; they are
+created internally when you create a fleet using **flt_fleet_new**(3).  They are
+only available inside the body of an executing task; the **flt** instance for
+the context that runs the task will be passed as the first parameter to the
+task's **flt_task**(3) function.
+
+There's also no way to interrogate any of the execution context's internal
+state; the main thing that you can do with an execution context is ask it
+schedule additional tasks, via the **flt_run**(3) family of functions.
