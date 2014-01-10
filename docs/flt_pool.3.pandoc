@@ -1,0 +1,118 @@
+% flt_pool(3)
+
+# NAME
+
+flt_pool -- Context-aware memory pools
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| **struct flt_pool**;
+|
+| typedef void
+| (**flt_pool_init_f**)(void \**ud*, void \**instance*);
+|
+| typedef void
+| (**flt_pool_reuse_f**)(void \**ud*, void \**instance*);
+|
+| typedef void
+| (**flt_pool_done_f**)(void \**ud*, void \**instance*);
+|
+| struct flt_pool \*
+| **flt_pool_new**(struct flt \**flt*, TYPE *type*, void \**ud*,
+|              flt_pool_init_f \**init*,
+|              flt_pool_reuse_f \**reuse*,
+|              flt_pool_done_f \**done*);
+|
+| struct flt_pool \*
+| **flt_pool_new_size**(struct flt \**flt*, size_t *instance_size*, void \**ud*,
+|                   flt_pool_init_f \**init*,
+|                   flt_pool_reuse_f \**reuse*,
+|                   flt_pool_done_f \**done*);
+|
+| void
+| **flt_pool_free**(struct flt_pool \**data*);
+|
+| void \*
+| **flt_pool_new_instance**(struct flt_pool \**data*, struct flt \**flt*);
+|
+| void
+| **flt_pool_free_instance**(struct flt_pool \**data*, struct flt \**flt*,
+|                        void \**instance*);
+
+
+# DESCRIPTION
+
+The **flt_pool** API is a memory pool implementation that is aware of fleet
+execution contexts and the threads that they run in.  This lets you efficiently
+allocate and deallocate instances of a particular data type in a thread-safe
+way.
+
+The difference between a memory *pool* and a memory *allocator* is that a memory
+pool allocates instances in batches, and allows instances to be (quickly) reused
+multiple times before being fully deallocated and returned to the OS.  Modern
+**malloc**(3) implementations are reasonably fast, even in multi-threaded
+applications, so if you don't need the batch allocation or instance reuse
+capabilities of a memory pool, you should just use **malloc**(3) and **free**(3)
+directly.
+
+**flt_pool_new**() and **flt_pool_new_size**() each create a new memory pool
+that manages instances of a particular data type.  These instances must all be
+the same size.  For **flt_pool_new_size**(), you provide the actual size of the
+data instances; for **flt_pool_new**(), you provide a C type, and we use the
+`sizeof` operator to determine the size of each instance.  You can also provide
+callbacks, as described in the next section, if you need to customize the
+initialization and finalization of the data instances.
+
+**flt_pool_free**() frees a memory pool, and any instances that it has created.
+If the memory pool is shared among multiple tasks, you must ensure that only one
+of them frees it, and only does so when all of the other tasks are done using
+it.
+
+**flt_pool_new_instance**() returns a new instance of the data type managed by
+the memory pool.  This can only be called from within an executing task; you
+must pass in the **flt**(3) execution context that the task is running in.
+
+**flt_pool_free_instance**() frees a data instance that was returned by a
+corresponding **flt_pool_new_instance**() call.  This can only be called from
+within an executing task; you must pass in the **flt**(3) execution context that
+the task is running in.  This does **not** have to be the same execution context
+that created the data instance; the memory pool will handle any necessary
+synchronization.
+
+
+# CALLBACKS
+
+You can provide callbacks if you need the memory pool to perform any
+initialization or finalization of each data instance.
+
+*init*
+
+  : Called when a new instance is first allocated.  You can use this callback to
+    initialize the new instance in whatever way is appropriate to the data type.
+    If you don't provide an *init* callback, the default is to fill the new
+    instance with `0x00` bytes.
+
+*reuse*
+
+  : Called when an instance is reused; e.g., when an instance that was recently
+    freed via **flt_pool_free_instance**() is about to be returned for a later
+    **flt_pool_new_instance**() call, without the instance having been fully
+    deallocated first.  You can use this callback to clear the contents of the
+    existing instance.  If you don't provide a *reuse* callback, the default is
+    to fill the new instance with `0x00` bytes.
+
+*done*
+
+  : Called when an instance is about to be fully deallocated, and its memory
+    returned to the OS.  You can use this callback to free any resources used by
+    the data instance.  If you don't provide a *done* callback, then we won't do
+    any finalization before freeing the instance.
+
+# RETURN VALUES
+
+**flt_pool_new**() will always return a valid new memory pool.
+
+**flt_pool_new_instance**() will always return a valid new instance of the data
+type managed by the memory pool.

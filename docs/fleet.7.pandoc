@@ -25,5 +25,5 @@ is the task equivalent of thread-local storage.
 
 Lastly, fleet uses these tools to provide several built-in higher-level
 abstractions.  In particular the **flt_channel**(3) API provides CSP-level
-communications channels between tasks, and the **flt_data**(3) API provides
+communications channels between tasks, and the **flt_pool**(3) API provides
 task-aware memory management.
