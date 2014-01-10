@@ -17,6 +17,15 @@ set(MAN_FOOTER "Fleet")
 # called foo.5.pandoc.
 
 set(MAN_PAGES
+    flt.3
+    flt_channel.3
+    flt_detach.3
+    flt_fleet.3
+    flt_local.3
+    flt_pool.3
+    flt_run.3
+    flt_task.3
+    fleet.7
 )
 
 #-----------------------------------------------------------------------

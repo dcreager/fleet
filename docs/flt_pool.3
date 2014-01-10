@@ -1,0 +1,175 @@
+.TH "flt_pool" "3" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+flt_pool \[en] Context\-aware memory pools
+.SH SYNOPSIS
+.PP
+\f[B]#include <fleet.h>\f[]
+.PP
+\f[B]struct flt_pool\f[];
+.PP
+typedef void
+.PD 0
+.P
+.PD
+(\f[B]flt_pool_init_f\f[])(void *\f[I]ud\f[], void *\f[I]instance\f[]);
+.PP
+typedef void
+.PD 0
+.P
+.PD
+(\f[B]flt_pool_reuse_f\f[])(void *\f[I]ud\f[], void *\f[I]instance\f[]);
+.PP
+typedef void
+.PD 0
+.P
+.PD
+(\f[B]flt_pool_done_f\f[])(void *\f[I]ud\f[], void *\f[I]instance\f[]);
+.PP
+struct flt_pool *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_new\f[](struct flt *\f[I]flt\f[], TYPE \f[I]type\f[], void
+*\f[I]ud\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_init_f *\f[I]init\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_reuse_f *\f[I]reuse\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_done_f *\f[I]done\f[]);
+.PP
+struct flt_pool *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_new_size\f[](struct flt *\f[I]flt\f[], size_t
+\f[I]instance_size\f[], void *\f[I]ud\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_init_f *\f[I]init\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_reuse_f *\f[I]reuse\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_done_f *\f[I]done\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_pool_free\f[](struct flt_pool *\f[I]data\f[]);
+.PP
+void *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_new_instance\f[](struct flt_pool *\f[I]data\f[], struct
+flt *\f[I]flt\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_pool_free_instance\f[](struct flt_pool *\f[I]data\f[], struct
+flt *\f[I]flt\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]instance\f[]);
+.SH DESCRIPTION
+.PP
+The \f[B]flt_pool\f[] API is a memory pool implementation that is aware
+of fleet execution contexts and the threads that they run in.
+This lets you efficiently allocate and deallocate instances of a
+particular data type in a thread\-safe way.
+.PP
+The difference between a memory \f[I]pool\f[] and a memory
+\f[I]allocator\f[] is that a memory pool allocates instances in batches,
+and allows instances to be (quickly) reused multiple times before being
+fully deallocated and returned to the OS.
+Modern \f[B]malloc\f[](3) implementations are reasonably fast, even in
+multi\-threaded applications, so if you don't need the batch allocation
+or instance reuse capabilities of a memory pool, you should just use
+\f[B]malloc\f[](3) and \f[B]free\f[](3) directly.
+.PP
+\f[B]flt_pool_new\f[]() and \f[B]flt_pool_new_size\f[]() each create a
+new memory pool that manages instances of a particular data type.
+These instances must all be the same size.
+For \f[B]flt_pool_new_size\f[](), you provide the actual size of the
+data instances; for \f[B]flt_pool_new\f[](), you provide a C type, and
+we use the \f[C]sizeof\f[] operator to determine the size of each
+instance.
+You can also provide callbacks, as described in the next section, if you
+need to customize the initialization and finalization of the data
+instances.
+.PP
+\f[B]flt_pool_free\f[]() frees a memory pool, and any instances that it
+has created.
+If the memory pool is shared among multiple tasks, you must ensure that
+only one of them frees it, and only does so when all of the other tasks
+are done using it.
+.PP
+\f[B]flt_pool_new_instance\f[]() returns a new instance of the data type
+managed by the memory pool.
+This can only be called from within an executing task; you must pass in
+the \f[B]flt\f[](3) execution context that the task is running in.
+.PP
+\f[B]flt_pool_free_instance\f[]() frees a data instance that was
+returned by a corresponding \f[B]flt_pool_new_instance\f[]() call.
+This can only be called from within an executing task; you must pass in
+the \f[B]flt\f[](3) execution context that the task is running in.
+This does \f[B]not\f[] have to be the same execution context that
+created the data instance; the memory pool will handle any necessary
+synchronization.
+.SH CALLBACKS
+.PP
+You can provide callbacks if you need the memory pool to perform any
+initialization or finalization of each data instance.
+.TP
+.B \f[I]init\f[]
+Called when a new instance is first allocated.
+You can use this callback to initialize the new instance in whatever way
+is appropriate to the data type.
+If you don't provide an \f[I]init\f[] callback, the default is to fill
+the new instance with \f[C]0x00\f[] bytes.
+.RS
+.RE
+.TP
+.B \f[I]reuse\f[]
+Called when an instance is reused; e.g., when an instance that was
+recently freed via \f[B]flt_pool_free_instance\f[]() is about to be
+returned for a later \f[B]flt_pool_new_instance\f[]() call, without the
+instance having been fully deallocated first.
+You can use this callback to clear the contents of the existing
+instance.
+If you don't provide a \f[I]reuse\f[] callback, the default is to fill
+the new instance with \f[C]0x00\f[] bytes.
+.RS
+.RE
+.TP
+.B \f[I]done\f[]
+Called when an instance is about to be fully deallocated, and its memory
+returned to the OS.
+You can use this callback to free any resources used by the data
+instance.
+If you don't provide a \f[I]done\f[] callback, then we won't do any
+finalization before freeing the instance.
+.RS
+.RE
+.SH RETURN VALUES
+.PP
+\f[B]flt_pool_new\f[]() will always return a valid new memory pool.
+.PP
+\f[B]flt_pool_new_instance\f[]() will always return a valid new instance
+of the data type managed by the memory pool.

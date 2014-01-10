@@ -1,0 +1,48 @@
+% flt_detach(3)
+
+# NAME
+
+flt_detach, flt_reattach -- Handling blocking syscalls
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| void
+| **flt_detach**(struct flt \**flt*);
+|
+| void
+| **flt_reattach**(struct flt \**flt*);
+
+
+# DESCRIPTION
+
+If you have a task that needs to make a blocking syscall --- to read from a file
+or network socket, for instance --- then you ideally want other fleet tasks to
+be able to proceed while the original task is blocked.  If you don't, then you
+can easily stall the entire fleet (for instance, if all of the threads that the
+fleet creates are blocked).
+
+To handle this situation, well-behaved tasks should *detach* their execution
+context immediately before making a blocking call, and should *reattach* once it
+returns.  This allows the fleet's scheduler to shift any scheduled tasks to
+other execution contexts, allowing them to proceed during the blocking call.
+
+For example:
+
+    static flt_task  read_file;
+
+    static void
+    parent_task(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+    {
+        FILE  *file = u1;
+        char  *buf = u2;
+        size_t  *buf_size = u3;
+        size_t  bytes_read;
+
+        flt_detach(flt);
+        bytes_read = fread(buf, *buf_size, 1, file);
+        flt_reattach(flt);
+
+        /* Do something with the data that was just read */
+    }

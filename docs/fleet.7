@@ -1,0 +1,33 @@
+.TH "fleet" "7" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+fleet \[en] Fast and lightweight user\-level concurrency and parallelism
+.SH DESCRIPTION
+.PP
+The fleet library provides a simple user\-level concurrency and
+parallelism API.
+The name \[lq]fleet\[rq] is meant to evoke both speed, and that your
+application is a collection of small tasks cooperate to accomplish some
+goal.
+.PP
+At the lowest level, fleet provides an API for scheduling and executing
+\f[I]tasks\f[], which are small units of computation; see
+\f[B]flt_fleet\f[](3) and \f[B]flt_task\f[](3) for details.
+This low\-level API is purposefully simple.
+It does not worry about any memory management, and the only
+communication primitive is a simple \[lq]executes after\[rq]
+relationship between tasks.
+While this simplicity places restrictions on the kinds of code you can
+(easily) write, it also gives our task scheduler the most flexibility in
+exploiting multiple cores to execute your fleet of tasks in parallel.
+.PP
+Fleet also provides tools for building higher\-level abstractions on top
+of the low\-level task scheduling API.
+The primary example is \f[B]flt_local\f[](3), which is the task
+equivalent of thread\-local storage.
+.PP
+Lastly, fleet uses these tools to provide several built\-in
+higher\-level abstractions.
+In particular the \f[B]flt_channel\f[](3) API provides CSP\-like
+communications channels between tasks, and the \f[B]flt_pool\f[](3) API
+provides task\-aware memory management.

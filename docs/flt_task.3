@@ -1,0 +1,34 @@
+.TH "flt_task" "3" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+flt_task \[en] Tasks
+.SH SYNOPSIS
+.PP
+\f[B]#include <fleet.h>\f[]
+.PP
+typedef void
+.PD 0
+.P
+.PD
+\f[B]flt_task\f[](struct flt *\f[I]flt\f[], void *\f[I]u1\f[], void
+*\f[I]u2\f[], void *\f[I]u3\f[], void *\f[I]u4\f[]);
+.SH DESCRIPTION
+.PP
+A \f[I]task\f[] is the smallest unit of computation in a fleet.
+When you schedule a task, the fleet will decide to run it at some point,
+in some execution context.
+(You can have some control over when and in which context, depending on
+which function you use to schedule the task; see \f[B]flt_run\f[](3) for
+details.)
+.PP
+Each task is represented by a \[lq]task function\[rq], which is the
+block of code that will execute when the fleet decides that it's time to
+run the task.
+The \f[I]uX\f[] input parameters can be used to communicate with other
+tasks.
+The values to pass in for the \f[I]uX\f[] input parameters are provided
+when you schedule the task.
+.PP
+In addition to the \f[I]uX\f[] input parameters, each task function is
+given a \f[B]flt\f[](3) instance, which can be used to schedule
+additional tasks using the \f[B]flt_run\f[](3) family of functions.
