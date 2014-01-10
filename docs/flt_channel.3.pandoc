@@ -22,6 +22,10 @@ flt_channel -- Context-aware message passing
 |                  void \**u1*, void \**v2*);
 |
 | void
+| **flt_channel_send_later**(struct flt_channel \**channel*, struct flt \**flt*,
+|                       void \**u1*, void \**v2*);
+|
+| void
 | **flt_channel_return_to**(struct flt_channel \**channel*, struct flt \**flt*,
 |                       void \**u1*, void \**v2*);
 |
@@ -63,10 +67,13 @@ parameters provided when the channel was created.
 
 The different variants use different **flt_run** functions to schedule the
 receiver task.  **flt_channel_send**() uses the basic **flt_run**(3) function.
-**flt_channel_return_to**() uses **flt_return_to**(3), which means it must only
-be used as the last statement of the sending task.  **flt_channel_send_then**()
-uses **flt_then**(3), which allows you to provide a *second* task, which will be
-scheduled to run after the receiver task finishes.
+**flt_channel_send_later**() uses **flt_run_later**(3), which provides a hint to
+the fleet scheduler that other existing tasks should be allowed to run before
+the receiver processes this message.  **flt_channel_return_to**() uses
+**flt_return_to**(3), which means it must only be used as the last statement of
+the sending task.  **flt_channel_send_then**() uses **flt_then**(3), which
+allows you to provide a *second* task, which will be scheduled to run after the
+receiver task finishes.
 
 
 # RETURN VALUES

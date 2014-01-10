@@ -13,6 +13,10 @@ flt_run -- Scheduling tasks
 |         void \**u1*, void \**u2*, void \**u3*, void \**u4*);
 |
 | void
+| **flt_run_later**(struct flt \**flt*, flt_task \**task*,
+|               void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+|
+| void
 | **flt_return_to**(struct flt \**flt*, flt_task \**task*,
 |               void \**u1*, void \**u2*, void \**u3*, void \**u4*);
 |
@@ -35,6 +39,9 @@ can only be called from within an already running task.  (Use
 where the new task is executed; however, this gives the underlying fleet the
 most flexibility in executing tasks in parallel.  You should only use the more
 complex variants if you really need the extra constraints that they impose.
+
+**flt_run_later**() works just like **flt_run**(), but provides a hint to the
+scheduler that it should allow other existing tasks to run first.
 
 **flt_return_to**() is a more efficient version of **flt_run**() that can only
 be used as the last statement of a parent task.  (It can be anywhere in the

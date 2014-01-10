@@ -40,6 +40,18 @@ void
 .PD 0
 .P
 .PD
+\f[B]flt_channel_send_later\f[](struct flt_channel *\f[I]channel\f[],
+struct flt *\f[I]flt\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void
+*\f[I]v2\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
 \f[B]flt_channel_return_to\f[](struct flt_channel *\f[I]channel\f[],
 struct flt *\f[I]flt\f[],
 .PD 0
@@ -110,6 +122,9 @@ channel was created.
 The different variants use different \f[B]flt_run\f[] functions to
 schedule the receiver task.
 \f[B]flt_channel_send\f[]() uses the basic \f[B]flt_run\f[](3) function.
+\f[B]flt_channel_send_later\f[]() uses \f[B]flt_run_later\f[](3), which
+provides a hint to the fleet scheduler that other existing tasks should
+be allowed to run before the receiver processes this message.
 \f[B]flt_channel_return_to\f[]() uses \f[B]flt_return_to\f[](3), which
 means it must only be used as the last statement of the sending task.
 \f[B]flt_channel_send_then\f[]() uses \f[B]flt_then\f[](3), which allows

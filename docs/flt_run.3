@@ -21,6 +21,18 @@ void
 .PD 0
 .P
 .PD
+\f[B]flt_run_later\f[](struct flt *\f[I]flt\f[], flt_task
+*\f[I]task\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void *\f[I]u2\f[], void
+*\f[I]u3\f[], void *\f[I]u4\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
 \f[B]flt_return_to\f[](struct flt *\f[I]flt\f[], flt_task
 *\f[I]task\f[],
 .PD 0
@@ -63,6 +75,10 @@ however, this gives the underlying fleet the most flexibility in
 executing tasks in parallel.
 You should only use the more complex variants if you really need the
 extra constraints that they impose.
+.PP
+\f[B]flt_run_later\f[]() works just like \f[B]flt_run\f[](), but
+provides a hint to the scheduler that it should allow other existing
+tasks to run first.
 .PP
 \f[B]flt_return_to\f[]() is a more efficient version of
 \f[B]flt_run\f[]() that can only be used as the last statement of a
