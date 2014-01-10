@@ -1,0 +1,56 @@
+.TH "flt_detach" "3" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+flt_detach, flt_reattach \[en] Handling blocking syscalls
+.SH SYNOPSIS
+.PP
+\f[B]#include <fleet.h>\f[]
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_detach\f[](struct flt *\f[I]flt\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_reattach\f[](struct flt *\f[I]flt\f[]);
+.SH DESCRIPTION
+.PP
+If you have a task that needs to make a blocking syscall \[em] to read
+from a file or network socket, for instance \[em] then you ideally want
+other fleet tasks to be able to proceed while the original task is
+blocked.
+If you don't, then you can easily stall the entire fleet (for instance,
+if all of the threads that the fleet creates are blocked).
+.PP
+To handle this situation, well\-behaved tasks should \f[I]detach\f[]
+their execution context immediately before making a blocking call, and
+should \f[I]reattach\f[] once it returns.
+This allows the fleet's scheduler to shift any scheduled tasks to other
+execution contexts, allowing them to proceed during the blocking call.
+.PP
+For example:
+.IP
+.nf
+\f[C]
+static\ flt_task\ \ read_file;
+
+static\ void
+parent_task(struct\ flt\ *flt,\ void\ *u1,\ void\ *u2,\ void\ *u3,\ void\ *u4)
+{
+\ \ \ \ FILE\ \ *file\ =\ u1;
+\ \ \ \ char\ \ *buf\ =\ u2;
+\ \ \ \ size_t\ \ *buf_size\ =\ u3;
+\ \ \ \ size_t\ \ bytes_read;
+
+\ \ \ \ flt_detach(flt);
+\ \ \ \ bytes_read\ =\ fread(buf,\ *buf_size,\ 1,\ file);
+\ \ \ \ flt_reattach(flt);
+
+\ \ \ \ /*\ Do\ something\ with\ the\ data\ that\ was\ just\ read\ */
+}
+\f[]
+.fi
