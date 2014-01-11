@@ -27,8 +27,10 @@ macro(make_test test_name)
     add_test(${test_name} ${test_name})
 endmacro(make_test)
 
-# Add calls to make_test for each .c test case in the tests/ directory.
-# make_test(test-foo)
+make_test(test-concurrent)
+make_test(test-concurrent-batched)
+make_test(test-sequential-return)
+make_test(test-sequential-run)
 
 #-----------------------------------------------------------------------
 # Command-line tests
