@@ -51,6 +51,7 @@ struct flt {
     struct flt_fleet  *fleet;
     struct flt_task  *ready;
     struct flt_task  *later;
+    struct flt_task  *unused;
 };
 
 FLT_INTERNAL
