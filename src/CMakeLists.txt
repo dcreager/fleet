@@ -6,13 +6,15 @@
 # Please see the COPYING file in this distribution for license details.
 # ----------------------------------------------------------------------
 
-include_directories(../include)
+include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 #-----------------------------------------------------------------------
 # Build the library
 
 set(LIBFLEET_SRC
-    libfleet/foo.c
+    libfleet/fleet.c
+    libfleet/single-threaded.c
 )
 
 # Update the VERSION and SOVERSION properties below according to the following
