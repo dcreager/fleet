@@ -18,18 +18,47 @@
  * Tasks
  */
 
+/* 8Kb batches */
+#define TASK_BATCH_SIZE  8192
+#define TASK_BATCH_COUNT  (TASK_BATCH_SIZE / sizeof(struct flt_task))
+
+/* Create a new batch of task instances.  Link them all together via their next
+ * fields */
+static void
+flt_task_batch_new(struct flt *flt)
+{
+    struct flt_task  *task = malloc(TASK_BATCH_SIZE);
+    struct flt_task  *curr;
+    struct flt_task  *last = task + TASK_BATCH_COUNT - 1;
+
+    /* The first task in the batch is reserved, and is used to keep track of the
+     * batches that are owned by this context. */
+    task->next = flt->batches;
+    flt->batches = task;
+
+    /* The remaining tasks in the batch can be used by the scheduler.  These
+     * task instances start off local to this context, but might migrate to
+     * other contexts while the scheduler runs.  That's perfectly fine; we keep
+     * track of the batches separately so that we can free everything safely
+     * when the fleet is freed. */
+    for (curr = task + 1; curr < last; curr++) {
+        curr->next = curr + 1;
+    }
+    last->next = flt->unused;
+    flt->unused = task + 1;
+}
+
 struct flt_task *
 flt_task_new(struct flt *flt, flt_task *func,
              void *u1, void *u2, void *u3, void *u4,
              struct flt_task *after)
 {
     struct flt_task  *task;
-    if (flt->unused == NULL) {
-        task = malloc(sizeof(struct flt_task));
-    } else {
-        task = flt->unused;
-        flt->unused = task->next;
+    if (unlikely(flt->unused == NULL)) {
+        flt_task_batch_new(flt);
     }
+    task = flt->unused;
+    flt->unused = task->next;
     task->func = func;
     task->u1 = u1;
     task->u2 = u2;
@@ -60,10 +89,11 @@ flt_init(struct flt *flt, struct flt_fleet *fleet, size_t index, size_t count)
     flt->ready = NULL;
     flt->later = NULL;
     flt->unused = NULL;
+    flt->batches = NULL;
 }
 
 static void
-flt_task_list_done(struct flt_task *curr)
+flt_task_batch_list_done(struct flt_task *curr)
 {
     struct flt_task  *next;
     while (curr != NULL) {
@@ -76,7 +106,5 @@ flt_task_list_done(struct flt_task *curr)
 void
 flt_done(struct flt *flt)
 {
-    flt_task_list_done(flt->ready);
-    flt_task_list_done(flt->later);
-    flt_task_list_done(flt->unused);
+    flt_task_batch_list_done(flt->batches);
 }

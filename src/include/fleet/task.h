@@ -52,6 +52,7 @@ struct flt {
     struct flt_task  *ready;
     struct flt_task  *later;
     struct flt_task  *unused;
+    struct flt_task  *batches;
 };
 
 FLT_INTERNAL
