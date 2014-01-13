@@ -6,8 +6,9 @@
 # Please see the COPYING file in this distribution for license details.
 # ----------------------------------------------------------------------
 
-include_directories(../include)
-link_directories(${CMAKE_CURRENT_BINARY_DIR}/../src)
+include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/examples)
+link_directories(${CMAKE_BINARY_DIR}/src)
 
 #-----------------------------------------------------------------------
 # Check for prerequisite libraries
@@ -27,8 +28,8 @@ macro(make_test test_name)
     add_test(${test_name} ${test_name})
 endmacro(make_test)
 
-make_test(test-concurrent)
 make_test(test-concurrent-batched)
+make_test(test-concurrent-unbatched)
 make_test(test-sequential-return)
 make_test(test-sequential-run)
 

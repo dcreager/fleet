@@ -7,33 +7,21 @@
  * ----------------------------------------------------------------------
  */
 
-#include <errno.h>
 #include <inttypes.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-
-#include <check.h>
+#include <stdint.h>
 
 #include "fleet.h"
-
-#include "helpers.h"
-#include "fleet-test.c"
+#include "examples.h"
 
 
-/*-----------------------------------------------------------------------
- * Test computation
- */
-
-static uint64_t  min = 0;
-static uint64_t  max = 1000000;
+static uint64_t  min;
+static uint64_t  max;
 static uint64_t  result;
 
 static void
 run_native(void)
 {
-    volatile uint64_t  sum = 0;
+    uint64_t  sum = 0;
     uint64_t  i;
     for (i = min; i < max; i++) {
         sum += i;
@@ -54,6 +42,8 @@ static void
 schedule(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
 {
     uint64_t  i;
+    /* TODO: This only works in a single-threaded scheduler, since we're not
+     * synchronizing updates to the result global variable. */
     for (i = min; i < max; i++) {
         flt_run(flt, add_one, (void *) i, NULL, NULL, NULL);
     }
@@ -66,30 +56,25 @@ run_in_fleet(struct flt_fleet *fleet)
     flt_fleet_run(fleet, schedule, NULL, NULL, NULL, NULL);
 }
 
-static void
+static int
 verify(void)
 {
-    fail_unless_equal("Results", "%" PRIu64, UINT64_C(499999500000), result);
+    uint64_t  expected = max * (max - 1) / 2;
+    flt_check_result(concurrent_unbatched, "%" PRIu64, result, expected);
+    return 0;
 }
 
+static struct flt_example  example = {
+    run_native,
+    run_in_fleet,
+    verify
+};
 
-test_fleet_computation(concurrent);
-
-
-/*-----------------------------------------------------------------------
- * Testing harness
- */
-
-int
-main(int argc, const char **argv)
+struct flt_example *
+concurrent_unbatched(uint64_t max_)
 {
-    int  number_failed;
-    Suite  *suite = test_suite();
-    SRunner  *runner = srunner_create(suite);
-
-    srunner_run_all(runner, CK_NORMAL);
-    number_failed = srunner_ntests_failed(runner);
-    srunner_free(runner);
-
-    return (number_failed == 0)? EXIT_SUCCESS: EXIT_FAILURE;
+    result = 0;
+    min = 0;
+    max = max_;
+    return &example;
 }

@@ -17,11 +17,11 @@
 #include <check.h>
 
 #include "helpers.h"
-#include "concurrent-batched.c"
+#include "concurrent-unbatched.c"
 #include "fleet-test.c"
 
 
-test_fleet_computation(concurrent_batched(16, 100000));
+test_fleet_computation(concurrent_unbatched(100000));
 
 
 /*-----------------------------------------------------------------------
