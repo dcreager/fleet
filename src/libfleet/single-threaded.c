@@ -18,54 +18,42 @@
  */
 
 void
-flt_run(struct flt *flt, flt_task *func,
-        void *u1, void *u2, void *u3, void *u4)
+flt_run(struct flt *pflt, struct flt_task *task)
 {
-    struct flt_task  *task = flt_task_new(flt, func, u1, u2, u3, u4, NULL);
-    task->next = flt->ready;
-    flt->ready = task;
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    task->group->active_tasks++;
+    flt_dllist_add_to_head(&flt->ready, &task->item);
 }
 
 void
-flt_run_later(struct flt *flt, flt_task *func,
-              void *u1, void *u2, void *u3, void *u4)
+flt_run_later(struct flt *pflt, struct flt_task *task)
 {
-    struct flt_task  *task = flt_task_new(flt, func, u1, u2, u3, u4, NULL);
-    task->next = flt->later;
-    flt->later = task;
-}
-
-void
-flt_then(struct flt *flt,
-         flt_task *ffunc, void *fu1, void *fu2, void *fu3, void *fu4,
-         flt_task *sfunc, void *su1, void *su2, void *su3, void *su4)
-{
-    struct flt_task  *second =
-        flt_task_new(flt, sfunc, su1, su2, su3, su4, NULL);
-    struct flt_task  *first =
-        flt_task_new(flt, ffunc, fu1, fu2, fu3, fu4, second);
-    first->next = flt->ready;
-    flt->ready = first;
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    task->group->active_tasks++;
+    flt_dllist_add_to_tail(&flt->ready, &task->item);
 }
 
 
 static void
-flt_loop(struct flt *flt)
+flt_task_run_all(struct flt_priv *flt, struct flt_task *task)
 {
-    do {
-        while (!flt_ready_queue_is_empty(flt)) {
-            struct flt_task  *task = flt->ready;
-            flt->ready = task->next;
-            do {
-                struct flt_task  *after = task->after;
-                flt_task_run(flt, task);
-                flt_task_free(flt, task);
-                task = after;
-            } while (task != NULL);
-        }
-        flt->ready = flt->later;
-        flt->later = NULL;
-    } while (!flt_ready_queue_is_empty(flt));
+    size_t  i;
+    for (i = task->min; i < task->max; i++) {
+        flt_task_run(&flt->public, task, i);
+    }
+}
+
+static void
+flt_loop(struct flt_priv *flt)
+{
+    while (!flt_dllist_is_empty(&flt->ready)) {
+        struct flt_dllist_item  *head = flt_dllist_start(&flt->ready);
+        struct flt_task  *task = container_of(head, struct flt_task, item);
+        flt_task_run_all(flt, task);
+        flt_dllist_remove(head);
+        flt_task_group_decrement(flt, task->group);
+        flt_task_free(flt, task);
+    }
 }
 
 
@@ -74,7 +62,7 @@ flt_fleet_new(void)
 {
     struct flt_fleet  *fleet = malloc(sizeof(struct flt_fleet));
     fleet->count = 1;
-    fleet->contexts = malloc(sizeof(struct flt));
+    fleet->contexts = malloc(sizeof(struct flt_priv));
     flt_init(fleet->contexts, fleet, 0, 1);
     return fleet;
 }
@@ -88,12 +76,10 @@ flt_fleet_free(struct flt_fleet *fleet)
 }
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task *func,
-              void *u1, void *u2, void *u3, void *u4)
+flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t i)
 {
-    struct flt  *flt = fleet->contexts;
-    struct flt_task  *task = flt_task_new(flt, func, u1, u2, u3, u4, NULL);
-    task->next = flt->ready;
-    flt->ready = task;
+    struct flt_priv  *flt = fleet->contexts;
+    struct flt_task  *task = flt_task_new(&flt->public, func, ud, i);
+    flt_run(&flt->public, task);
     flt_loop(flt);
 }

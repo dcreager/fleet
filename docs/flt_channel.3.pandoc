@@ -10,30 +10,28 @@ flt_channel -- Context-aware message passing
 |
 | **struct flt_channel**;
 |
+| **struct flt_channel_data** {
+|     void \**ud*;
+|     void \**data*;
+| };
+|
 | struct flt_channel \*
-| **flt_channel_new**(struct flt \**flt*, flt_task \**receiver*,
-|                 void \**u3*, void \**u4*);
+| **flt_channel_new**(struct flt \**flt*, flt_task \**receiver*, void \**ud*);
 |
 | void
 | **flt_channel_free**(struct flt_channel \**channel*);
 |
 | void
 | **flt_channel_send**(struct flt_channel \**channel*, struct flt \**flt*,
-|                  void \**u1*, void \**v2*);
+|                  void \**data*);
 |
 | void
 | **flt_channel_send_later**(struct flt_channel \**channel*, struct flt \**flt*,
-|                       void \**u1*, void \**v2*);
+|                        void \**data*);
 |
 | void
 | **flt_channel_return_to**(struct flt_channel \**channel*, struct flt \**flt*,
-|                       void \**u1*, void \**v2*);
-|
-| void
-| **flt_channel_send_then**(struct flt_channel \**channel*, struct flt \**flt*,
-|                       void \**u1*, void \**v2*,
-|                       flt_task \**second*,
-|                       void \**su1*, void \**su2*, void \**su3*, void \**su4*);
+|                       void \**data*);
 
 
 # DESCRIPTION
@@ -44,26 +42,29 @@ allows your tasks to be more decoupled from each other.
 
 **flt_channel_new**() creates a new channel with the given *receiver*, which is
 the task function that will be scheduled whenever some other task writes into
-the channel.  The receiver's *u3* and *u4* parameters are given when you create
-the channel, allowing you to carry state over between different invocations of
-the receiver task.  The *u1* and *u2* parameters are provided by the sender,
-allowing the sender to pass data to the receiver.
+the channel.
 
-Note that the same *u3* and *u4* values will be used for each invocation of the
+Each time the receiver is invoked, its *ud* parameter will be an instance of
+**flt_channel_data**.  The *ud* field of this **flt_channel_data** instance is
+given when the channel is constructed, allowing you to carry state over between
+different invocations of the receiver task.  Its *data* field is given by the
+sender, allowing the sender to pass data to the receiver.
+
+Note that the same *ud* field value will be used for each invocation of the
 receiver task.  There isn't any guarantee about when the receiver invocations
 will execute.  In particular, it's possible for multiple invocations to execute
-simultaneously.  This means that your *u3* and *u4* values should either be
-read-only, or you must use some kind of synchronization mechanism (such as an
-**flt_local**(3) instance) to protect your access to their contents.
+simultaneously.  This means that your *ud* value  should either be read-only, or
+you must use some kind of synchronization mechanism (such as an **flt_local**(3)
+instance) to protect your access to its contents.
 
 **flt_channel_free**() frees a channel.  If the channel is shared among multiple
 tasks, you must ensure that only one of them frees it, and only does so when all
 of the other tasks are done using it.
 
 **flt_channel_send**() and friends allow a task to "write" into a channel.  The
-channel will then schedule a new invocation of its *receiver* task, using the
-*u1* and *u2* parameters provided by the sender, and the *u3* and *u4*
-parameters provided when the channel was created.
+channel will then schedule a new invocation of its *receiver* task, which will
+receive an **flt_channel_data** instance with a *data* field provided by the
+sender, and with the *ud* field provided when the channel was created.
 
 The different variants use different **flt_run** functions to schedule the
 receiver task.  **flt_channel_send**() uses the basic **flt_run**(3) function.
@@ -71,9 +72,7 @@ receiver task.  **flt_channel_send**() uses the basic **flt_run**(3) function.
 the fleet scheduler that other existing tasks should be allowed to run before
 the receiver processes this message.  **flt_channel_return_to**() uses
 **flt_return_to**(3), which means it must only be used as the last statement of
-the sending task.  **flt_channel_send_then**() uses **flt_then**(3), which
-allows you to provide a *second* task, which will be scheduled to run after the
-receiver task finishes.
+the sending task.
 
 
 # RETURN VALUES

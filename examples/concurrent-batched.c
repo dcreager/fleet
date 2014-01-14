@@ -18,6 +18,7 @@ static uint64_t  min;
 static uint64_t  max;
 static uint64_t  batch_size;
 static uint64_t  result;
+static uint64_t  temp_result;
 
 static void
 run_native(void)
@@ -31,38 +32,57 @@ run_native(void)
 }
 
 static flt_task  add_one;
+static flt_task  copy_result;
+static flt_task  schedule_batch;
+static flt_task  schedule;
 
 static void
-add_one(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+add_one(struct flt *flt, void *ud, size_t i)
 {
-    uint64_t  i = (uintptr_t) u1;
-    result += i;
+    uint64_t  *result = ud;
+    *result += i;
 }
 
 static void
-schedule_batch(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+copy_result(struct flt *flt, void *ud, size_t i)
 {
-    uint64_t  i = (uintptr_t) u1;
+    uint64_t  *temp_result = ud;
+    result = *temp_result;
+}
+
+static void
+schedule_batch(struct flt *flt, void *ud, size_t i)
+{
+    struct flt_task  *task;
     uint64_t  j = i + batch_size;
 
     if (j > max) {
         j = max;
     } else {
-        flt_run(flt, schedule_batch, (void *) j, NULL, NULL, NULL);
+        task = flt_task_new(flt, schedule_batch, ud, j);
+        flt_run_later(flt, task);
     }
 
     /* TODO: This only works in a single-threaded scheduler, since we're not
      * synchronizing updates to the result global variable. */
-    for (; i < j; i++) {
-        flt_run(flt, add_one, (void *) i, NULL, NULL, NULL);
-    }
+    task = flt_bulk_task_new(flt, add_one, ud, i, j);
+    flt_run(flt, task);
+}
+
+static void
+schedule(struct flt *flt, void *ud, size_t min)
+{
+    struct flt_task  *task = flt_task_new(flt, copy_result, ud, 0);
+    flt_run_after_current_group(flt, task);
+    return flt_return_to(flt, schedule_batch, ud, min);
 }
 
 static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    flt_fleet_run(fleet, schedule_batch, (void *) min, NULL, NULL, NULL);
+    temp_result = 0;
+    flt_fleet_run(fleet, schedule, &temp_result, min);
 }
 
 static int

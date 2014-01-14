@@ -11,6 +11,10 @@
 #define FLEET_TASK_H
 
 #include "fleet/internal.h"
+#include "fleet/dllist.h"
+
+
+struct flt_priv;
 
 
 /*-----------------------------------------------------------------------
@@ -18,52 +22,76 @@
  */
 
 struct flt_task {
-    struct flt_task  *next;
+    struct flt_dllist_item  item;
+    struct flt_task_group  *group;
     flt_task  *func;
-    void  *u1;
-    void  *u2;
-    void  *u3;
-    void  *u4;
-    struct flt_task  *after;
+    void  *ud;
+    size_t  min;
+    size_t  max;
 };
 
 FLT_INTERNAL
-struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func,
-             void *u1, void *u2, void *u3, void *u4,
-             struct flt_task *after);
+void
+flt_task_free(struct flt_priv *flt, struct flt_task *task);
+
+#define flt_task_run(f, t, i)  ((t)->func((f), (t)->ud, (i)))
+
+
+/*-----------------------------------------------------------------------
+ * Task groups
+ */
+
+struct flt_task_group {
+    struct flt_dllist_item  item;
+    struct flt_dllist  after;
+    size_t  active_tasks;
+    size_t  after_tasks;
+};
+
+FLT_INTERNAL
+struct flt_task_group *
+flt_task_group_new(struct flt_priv *flt);
 
 FLT_INTERNAL
 void
-flt_task_free(struct flt *flt, struct flt_task *task);
+flt_task_group_free(struct flt_priv *flt, struct flt_task_group *group);
 
-#define flt_task_run(f, t) \
-    ((t)->func((f), (t)->u1, (t)->u2, (t)->u3, (t)->u4))
+FLT_INTERNAL
+void
+flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
 
 
 /*-----------------------------------------------------------------------
  * Execution contexts
  */
 
-struct flt {
+struct flt_priv {
+    struct flt  public;
     size_t  index;
     size_t  count;
     struct flt_fleet  *fleet;
-    struct flt_task  *ready;
-    struct flt_task  *later;
-    struct flt_task  *unused;
-    struct flt_task  *batches;
+    struct flt_dllist  ready;
+    struct flt_dllist  unused;
+    struct flt_dllist  batches;
+    struct flt_dllist  groups;
 };
 
 FLT_INTERNAL
 void
-flt_init(struct flt *flt, struct flt_fleet *fleet, size_t index, size_t count);
+flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
+         size_t index, size_t count);
 
 FLT_INTERNAL
 void
-flt_done(struct flt *flt);
+flt_done(struct flt_priv *flt);
 
-#define flt_ready_queue_is_empty(flt)  ((flt)->ready == NULL)
+static inline
+struct flt_task_group *
+flt_current_group_priv(struct flt_priv *flt)
+{
+    struct flt_dllist_item  *head = flt_dllist_start(&flt->groups);
+    return container_of(head, struct flt_task_group, item);
+}
 
 
 /*-----------------------------------------------------------------------
@@ -72,7 +100,7 @@ flt_done(struct flt *flt);
 
 struct flt_fleet {
     size_t  count;
-    struct flt  *contexts;
+    struct flt_priv  *contexts;
 };
 
 

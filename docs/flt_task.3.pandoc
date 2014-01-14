@@ -8,8 +8,17 @@ flt_task -- Tasks
 
 | **#include &lt;fleet.h&gt;**
 |
+| **struct flt_task**;
+|
 | typedef void
-| **flt_task**(struct flt \**flt*, void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+| **flt_task**(struct flt \**flt*, void \**ud*, size_t *i*);
+|
+| struct flt_task \*
+| **flt_task_new**(struct flt \**flt*, flt_task \**func*, void \**ud*, size_t *i*);
+|
+| struct flt_task \*
+| **flt_bulk_task_new**(struct flt \**flt*, flt_task \**func*, void \**ud*,
+|                   size_t *min*, size_t *max*);
 
 
 # DESCRIPTION
@@ -19,11 +28,28 @@ task, the fleet will decide to run it at some point, in some execution context.
 (You can have some control over when and in which context, depending on which
 function you use to schedule the task; see **flt_run**(3) for details.)
 
-Each task is represented by a "task function", which is the block of code that
-will execute when the fleet decides that it's time to run the task.  The *uX*
-input parameters can be used to communicate with other tasks.  The values to
-pass in for the *uX* input parameters are provided when you schedule the task.
+Each task is represented by an **flt_task** instance, and consists of a "task
+function", which is the block of code that will execute when the fleet decides
+that it's time to run the task.
 
-In addition to the *uX* input parameters, each task function is given a
-**flt**(3) instance, which can be used to schedule additional tasks using the
-**flt_run**(3) family of functions.
+The task function's *ud* and *i* parameters are provided when you create a task
+instance.  **flt_task_new**() creates a new task that will execute the task
+function once, with the given *ud* and *i* parameters.  **flt_bulk_task_new**()
+lets you create a single **flt_task** instance that will call the task function
+multiple times, all with the same value for their *ud* parameter, but with
+different *i* values, ranging from *min* &lt;= *i* &lt; *max*.  (Note that even
+though all of these task invocations are represented by a single bulk
+**flt_task** instance, the fleet scheduler sees them as discrete schedulable
+entities.)
+
+In both cases, the new task is not yet scheduled for execution; you must use one
+of the **flt_run**(3) family of functions to schedule the new task.
+
+In addition to the *ud* and *i* input parameters, each task function is given a
+**flt**(3) instance, which can be used to create and schedule additional tasks.
+
+
+# RETURN VALUES
+
+**flt_task_new**() and **flt_bulk_task_new**() will always return a valid new
+task object.

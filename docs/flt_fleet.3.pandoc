@@ -18,7 +18,7 @@ flt_fleet -- Fleets of tasks
 |
 | void
 | **flt_fleet_run**(struct flt_fleet \**fleet*, flt_task \**task*,
-|               void \**u1*, void \**u2*, void \**u3*, void \**v4*);
+|               void \**ud*, size_t *i*);
 
 
 # DESCRIPTION
@@ -35,7 +35,7 @@ fleet.
 **flt_fleet_run**() runs a "root" task within *fleet*.  This task can create
 other tasks, as needed.  **flt_fleet_run**() will not return until the root
 task, and all of the child tasks that it creates, have finished.  As with all
-tasks, you can use the *uX* parameters to pass data into the task.
+tasks, you can use the *ud* and *i* parameters to pass data into the task.
 
 You should not try to access the **flt_fleet** instance from within any of the
 tasks that it runs.  In particular, you should not try to free the fleet from

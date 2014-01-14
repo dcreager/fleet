@@ -8,16 +8,26 @@ flt_channel \[en] Context\-aware message passing
 .PP
 \f[B]struct flt_channel\f[];
 .PP
+\f[B]struct flt_channel_data\f[] {
+.PD 0
+.P
+.PD
+\ \ \ \ void *\f[I]ud\f[];
+.PD 0
+.P
+.PD
+\ \ \ \ void *\f[I]data\f[];
+.PD 0
+.P
+.PD
+};
+.PP
 struct flt_channel *
 .PD 0
 .P
 .PD
 \f[B]flt_channel_new\f[](struct flt *\f[I]flt\f[], flt_task
-*\f[I]receiver\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u3\f[], void *\f[I]u4\f[]);
+*\f[I]receiver\f[], void *\f[I]ud\f[]);
 .PP
 void
 .PD 0
@@ -34,7 +44,7 @@ flt *\f[I]flt\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void *\f[I]v2\f[]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[]);
 .PP
 void
 .PD 0
@@ -45,8 +55,7 @@ struct flt *\f[I]flt\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void
-*\f[I]v2\f[]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[]);
 .PP
 void
 .PD 0
@@ -57,29 +66,7 @@ struct flt *\f[I]flt\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void
-*\f[I]v2\f[]);
-.PP
-void
-.PD 0
-.P
-.PD
-\f[B]flt_channel_send_then\f[](struct flt_channel *\f[I]channel\f[],
-struct flt *\f[I]flt\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void
-*\f[I]v2\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_task *\f[I]second\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]su1\f[], void
-*\f[I]su2\f[], void *\f[I]su3\f[], void *\f[I]su4\f[]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[]);
 .SH DESCRIPTION
 .PP
 A \f[I]channel\f[] allows a \[lq]sender\[rq] task to schedule new
@@ -90,22 +77,24 @@ This allows your tasks to be more decoupled from each other.
 \f[B]flt_channel_new\f[]() creates a new channel with the given
 \f[I]receiver\f[], which is the task function that will be scheduled
 whenever some other task writes into the channel.
-The receiver's \f[I]u3\f[] and \f[I]u4\f[] parameters are given when you
-create the channel, allowing you to carry state over between different
-invocations of the receiver task.
-The \f[I]u1\f[] and \f[I]u2\f[] parameters are provided by the sender,
-allowing the sender to pass data to the receiver.
 .PP
-Note that the same \f[I]u3\f[] and \f[I]u4\f[] values will be used for
-each invocation of the receiver task.
+Each time the receiver is invoked, its \f[I]ud\f[] parameter will be an
+instance of \f[B]flt_channel_data\f[].
+The \f[I]ud\f[] field of this \f[B]flt_channel_data\f[] instance is
+given when the channel is constructed, allowing you to carry state over
+between different invocations of the receiver task.
+Its \f[I]data\f[] field is given by the sender, allowing the sender to
+pass data to the receiver.
+.PP
+Note that the same \f[I]ud\f[] field value will be used for each
+invocation of the receiver task.
 There isn't any guarantee about when the receiver invocations will
 execute.
 In particular, it's possible for multiple invocations to execute
 simultaneously.
-This means that your \f[I]u3\f[] and \f[I]u4\f[] values should either be
-read\-only, or you must use some kind of synchronization mechanism (such
-as an \f[B]flt_local\f[](3) instance) to protect your access to their
-contents.
+This means that your \f[I]ud\f[] value should either be read\-only, or
+you must use some kind of synchronization mechanism (such as an
+\f[B]flt_local\f[](3) instance) to protect your access to its contents.
 .PP
 \f[B]flt_channel_free\f[]() frees a channel.
 If the channel is shared among multiple tasks, you must ensure that only
@@ -115,9 +104,9 @@ done using it.
 \f[B]flt_channel_send\f[]() and friends allow a task to \[lq]write\[rq]
 into a channel.
 The channel will then schedule a new invocation of its \f[I]receiver\f[]
-task, using the \f[I]u1\f[] and \f[I]u2\f[] parameters provided by the
-sender, and the \f[I]u3\f[] and \f[I]u4\f[] parameters provided when the
-channel was created.
+task, which will receive an \f[B]flt_channel_data\f[] instance with a
+\f[I]data\f[] field provided by the sender, and with the \f[I]ud\f[]
+field provided when the channel was created.
 .PP
 The different variants use different \f[B]flt_run\f[] functions to
 schedule the receiver task.
@@ -127,9 +116,6 @@ provides a hint to the fleet scheduler that other existing tasks should
 be allowed to run before the receiver processes this message.
 \f[B]flt_channel_return_to\f[]() uses \f[B]flt_return_to\f[](3), which
 means it must only be used as the last statement of the sending task.
-\f[B]flt_channel_send_then\f[]() uses \f[B]flt_then\f[](3), which allows
-you to provide a \f[I]second\f[] task, which will be scheduled to run
-after the receiver task finishes.
 .SH RETURN VALUES
 .PP
 \f[B]flt_channel_new\f[]() will always return a valid new channel.

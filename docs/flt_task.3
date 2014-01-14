@@ -6,12 +6,33 @@ flt_task \[en] Tasks
 .PP
 \f[B]#include <fleet.h>\f[]
 .PP
+\f[B]struct flt_task\f[];
+.PP
 typedef void
 .PD 0
 .P
 .PD
-\f[B]flt_task\f[](struct flt *\f[I]flt\f[], void *\f[I]u1\f[], void
-*\f[I]u2\f[], void *\f[I]u3\f[], void *\f[I]u4\f[]);
+\f[B]flt_task\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[], size_t
+\f[I]i\f[]);
+.PP
+struct flt_task *
+.PD 0
+.P
+.PD
+\f[B]flt_task_new\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]func\f[],
+void *\f[I]ud\f[], size_t \f[I]i\f[]);
+.PP
+struct flt_task *
+.PD 0
+.P
+.PD
+\f[B]flt_bulk_task_new\f[](struct flt *\f[I]flt\f[], flt_task
+*\f[I]func\f[], void *\f[I]ud\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ size_t \f[I]min\f[], size_t
+\f[I]max\f[]);
 .SH DESCRIPTION
 .PP
 A \f[I]task\f[] is the smallest unit of computation in a fleet.
@@ -21,14 +42,31 @@ in some execution context.
 which function you use to schedule the task; see \f[B]flt_run\f[](3) for
 details.)
 .PP
-Each task is represented by a \[lq]task function\[rq], which is the
-block of code that will execute when the fleet decides that it's time to
-run the task.
-The \f[I]uX\f[] input parameters can be used to communicate with other
-tasks.
-The values to pass in for the \f[I]uX\f[] input parameters are provided
-when you schedule the task.
+Each task is represented by an \f[B]flt_task\f[] instance, and consists
+of a \[lq]task function\[rq], which is the block of code that will
+execute when the fleet decides that it's time to run the task.
 .PP
-In addition to the \f[I]uX\f[] input parameters, each task function is
-given a \f[B]flt\f[](3) instance, which can be used to schedule
-additional tasks using the \f[B]flt_run\f[](3) family of functions.
+The task function's \f[I]ud\f[] and \f[I]i\f[] parameters are provided
+when you create a task instance.
+\f[B]flt_task_new\f[]() creates a new task that will execute the task
+function once, with the given \f[I]ud\f[] and \f[I]i\f[] parameters.
+\f[B]flt_bulk_task_new\f[]() lets you create a single \f[B]flt_task\f[]
+instance that will call the task function multiple times, all with the
+same value for their \f[I]ud\f[] parameter, but with different
+\f[I]i\f[] values, ranging from \f[I]min\f[] <= \f[I]i\f[] <
+\f[I]max\f[].
+(Note that even though all of these task invocations are represented by
+a single bulk \f[B]flt_task\f[] instance, the fleet scheduler sees them
+as discrete schedulable entities.)
+.PP
+In both cases, the new task is not yet scheduled for execution; you must
+use one of the \f[B]flt_run\f[](3) family of functions to schedule the
+new task.
+.PP
+In addition to the \f[I]ud\f[] and \f[I]i\f[] input parameters, each
+task function is given a \f[B]flt\f[](3) instance, which can be used to
+create and schedule additional tasks.
+.SH RETURN VALUES
+.PP
+\f[B]flt_task_new\f[]() and \f[B]flt_bulk_task_new\f[]() will always
+return a valid new task object.

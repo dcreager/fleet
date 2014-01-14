@@ -13,6 +13,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # Build the library
 
 set(LIBFLEET_SRC
+    libfleet/dllist.c
     libfleet/fleet.c
     libfleet/single-threaded.c
 )

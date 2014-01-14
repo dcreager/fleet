@@ -32,12 +32,14 @@ run_native(void)
 static flt_task  add_one;
 
 static void
-add_one(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+add_one(struct flt *flt, void *ud, size_t i)
 {
-    uint64_t  i = (uintptr_t) u1;
     if (i < max) {
-        result += i;
-        return flt_run(flt, add_one, (void *) (i+1), NULL, NULL, NULL);
+        struct flt_task  *task;
+        uint64_t  *result = ud;
+        *result += i;
+        task = flt_task_new(flt, add_one, result, i+1);
+        flt_run(flt, task);
     }
 }
 
@@ -45,7 +47,7 @@ static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    flt_fleet_run(fleet, add_one, (void *) 0, NULL, NULL, NULL);
+    flt_fleet_run(fleet, add_one, &result, min);
 }
 
 static int

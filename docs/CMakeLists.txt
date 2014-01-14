@@ -25,6 +25,7 @@ set(MAN_PAGES
     flt_pool.3
     flt_run.3
     flt_task.3
+    flt_task_group.3
     fleet.7
 )
 
