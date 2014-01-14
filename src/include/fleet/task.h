@@ -23,6 +23,7 @@ struct flt_priv;
 
 struct flt_task {
     struct flt_dllist_item  item;
+    struct flt_task_group  *group;
     flt_task  *func;
     void  *ud;
     size_t  min;
@@ -37,6 +38,30 @@ flt_task_free(struct flt_priv *flt, struct flt_task *task);
 
 
 /*-----------------------------------------------------------------------
+ * Task groups
+ */
+
+struct flt_task_group {
+    struct flt_dllist_item  item;
+    struct flt_dllist  after;
+    size_t  active_tasks;
+    size_t  after_tasks;
+};
+
+FLT_INTERNAL
+struct flt_task_group *
+flt_task_group_new(struct flt_priv *flt);
+
+FLT_INTERNAL
+void
+flt_task_group_free(struct flt_priv *flt, struct flt_task_group *group);
+
+FLT_INTERNAL
+void
+flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
+
+
+/*-----------------------------------------------------------------------
  * Execution contexts
  */
 
@@ -48,6 +73,7 @@ struct flt_priv {
     struct flt_dllist  ready;
     struct flt_dllist  unused;
     struct flt_dllist  batches;
+    struct flt_dllist  groups;
 };
 
 FLT_INTERNAL
@@ -58,6 +84,14 @@ flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
 FLT_INTERNAL
 void
 flt_done(struct flt_priv *flt);
+
+static inline
+struct flt_task_group *
+flt_current_group_priv(struct flt_priv *flt)
+{
+    struct flt_dllist_item  *head = flt_dllist_start(&flt->groups);
+    return container_of(head, struct flt_task_group, item);
+}
 
 
 /*-----------------------------------------------------------------------

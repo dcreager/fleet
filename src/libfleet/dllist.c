@@ -11,14 +11,6 @@
 
 
 void
-flt_dllist_init(struct flt_dllist *list)
-{
-    list->head.next = &list->head;
-    list->head.prev = &list->head;
-}
-
-
-void
 flt_dllist_map(struct flt_dllist *list, void *ud, flt_dllist_map_f *map)
 {
     struct flt_dllist_item  *curr = flt_dllist_start(list);

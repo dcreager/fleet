@@ -18,6 +18,7 @@ static uint64_t  min;
 static uint64_t  max;
 static uint64_t  batch_size;
 static uint64_t  result;
+static uint64_t  temp_result;
 
 static void
 run_native(void)
@@ -31,13 +32,22 @@ run_native(void)
 }
 
 static flt_task  add_one;
+static flt_task  copy_result;
 static flt_task  schedule_batch;
+static flt_task  schedule;
 
 static void
 add_one(struct flt *flt, void *ud, size_t i)
 {
     uint64_t  *result = ud;
     *result += i;
+}
+
+static void
+copy_result(struct flt *flt, void *ud, size_t i)
+{
+    uint64_t  *temp_result = ud;
+    result = *temp_result;
 }
 
 static void
@@ -60,10 +70,19 @@ schedule_batch(struct flt *flt, void *ud, size_t i)
 }
 
 static void
+schedule(struct flt *flt, void *ud, size_t min)
+{
+    struct flt_task  *task = flt_task_new(flt, copy_result, ud, 0);
+    flt_run_after_current_group(flt, task);
+    return flt_return_to(flt, schedule_batch, ud, min);
+}
+
+static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    flt_fleet_run(fleet, schedule_batch, &result, min);
+    temp_result = 0;
+    flt_fleet_run(fleet, schedule, &temp_result, min);
 }
 
 static int

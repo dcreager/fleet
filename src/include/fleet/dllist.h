@@ -30,10 +30,11 @@ struct flt_dllist {
 
 #define FLT_DLLIST_INIT(list)  { { &(list).head, &(list).head } }
 
-
-FLT_INTERNAL
-void
-flt_dllist_init(struct flt_dllist *list);
+#define flt_dllist_init(list) \
+    do { \
+        (list)->head.next = &(list)->head; \
+        (list)->head.prev = &(list)->head; \
+    } while (0)
 
 
 typedef void
@@ -97,6 +98,19 @@ flt_dllist_size(const struct flt_dllist *list);
     ((element) == &(list)->head)
 #define flt_dllist_is_end(list, element) \
     ((element) == &(list)->head)
+
+
+#define flt_dllist_add_list_to_head(dest, src) \
+    do { \
+        struct flt_dllist_item  *dest_end = flt_dllist_end(dest); \
+        struct flt_dllist_item  *src_end = flt_dllist_end(src); \
+        dest_end->next = &(src)->head; \
+        src_end->next = &(dest)->head; \
+        (src)->head.prev = dest_end; \
+        (dest)->head.prev = src_end; \
+        flt_dllist_remove(&(src)->head); \
+        flt_dllist_init(src); \
+    } while (0)
 
 
 #endif /* LIBFLT_DS_DLLIST_H */

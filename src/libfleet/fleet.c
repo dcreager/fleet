@@ -54,6 +54,12 @@ flt_task_batch_new(struct flt_priv *flt)
     return first;
 }
 
+static void
+flt_task_batch_free(struct flt_priv *flt, struct flt_task *batch)
+{
+    free(batch);
+}
+
 static struct flt_task *
 flt_reuse_task(struct flt *pflt, flt_task *func, void *ud,
                size_t min, size_t max);
@@ -69,6 +75,7 @@ flt_create_task(struct flt *pflt, flt_task *func, void *ud,
     task->ud = ud;
     task->min = min;
     task->max = max;
+    task->group = flt_current_group_priv(flt);
     return task;
 }
 
@@ -87,6 +94,7 @@ flt_reuse_task(struct flt *pflt, flt_task *func, void *ud,
     task->ud = ud;
     task->min = min;
     task->max = max;
+    task->group = flt_current_group_priv(flt);
     return task;
 }
 
@@ -99,6 +107,52 @@ flt_task_free(struct flt_priv *flt, struct flt_task *task)
 
 
 /*-----------------------------------------------------------------------
+ * Task groups
+ */
+
+struct flt_task_group *
+flt_task_group_new(struct flt_priv *flt)
+{
+    struct flt_task_group  *group = malloc(sizeof(struct flt_task_group));
+    group->active_tasks = 0;
+    group->after_tasks = 0;
+    flt_dllist_init(&group->after);
+    return group;
+}
+
+void
+flt_task_group_free(struct flt_priv *pflt, struct flt_task_group *group)
+{
+    free(group);
+}
+
+void
+flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group)
+{
+    if (--group->active_tasks == 0) {
+        if (!flt_dllist_is_empty(&group->after)) {
+            flt_dllist_add_list_to_head(&flt->ready, &group->after);
+        }
+    }
+}
+
+void
+flt_run_after_group(struct flt *flt, struct flt_task_group *group,
+                    struct flt_task *task)
+{
+    flt_dllist_add_to_tail(&group->after, &task->item);
+}
+
+void
+flt_run_after_current_group(struct flt *pflt, struct flt_task *task)
+{
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_task_group  *group = flt_current_group_priv(flt);
+    flt_dllist_add_to_tail(&group->after, &task->item);
+}
+
+
+/*-----------------------------------------------------------------------
  * Execution contexts
  */
 
@@ -106,17 +160,21 @@ void
 flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
          size_t index, size_t count)
 {
+    struct flt_task_group  *group;
     flt->index = index;
     flt->count = count;
     flt->fleet = fleet;
+    flt->public.new_task = flt_create_task;
     flt_dllist_init(&flt->ready);
     flt_dllist_init(&flt->unused);
     flt_dllist_init(&flt->batches);
-    flt->public.new_task = flt_create_task;
+    flt_dllist_init(&flt->groups);
+    group = flt_task_group_new(flt);
+    flt_dllist_add_to_head(&flt->groups, &group->item);
 }
 
 static void
-flt_task_batch_list_done(struct flt_dllist *list)
+flt_task_batch_list_done(struct flt_priv *flt, struct flt_dllist *list)
 {
     struct flt_dllist_item  *curr;
     struct flt_dllist_item  *next;
@@ -124,12 +182,36 @@ flt_task_batch_list_done(struct flt_dllist *list)
          !flt_dllist_is_end(list, curr); curr = next) {
         struct flt_task  *task = container_of(curr, struct flt_task, item);
         next = curr->next;
-        free(task);
+        flt_task_batch_free(flt, task);
+        curr = next;
+    }
+}
+
+static void
+flt_task_group_list_done(struct flt_priv *flt, struct flt_dllist *list)
+{
+    struct flt_dllist_item  *curr;
+    struct flt_dllist_item  *next;
+    for (curr = flt_dllist_start(list);
+         !flt_dllist_is_end(list, curr); curr = next) {
+        struct flt_task_group  *group =
+            container_of(curr, struct flt_task_group, item);
+        next = curr->next;
+        flt_task_group_free(flt, group);
+        curr = next;
     }
 }
 
 void
 flt_done(struct flt_priv *flt)
 {
-    flt_task_batch_list_done(&flt->batches);
+    flt_task_batch_list_done(flt, &flt->batches);
+    flt_task_group_list_done(flt, &flt->groups);
+}
+
+struct flt_task_group *
+flt_current_group(struct flt *pflt)
+{
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    return flt_current_group_priv(flt);
 }

@@ -39,7 +39,7 @@ void
 flt_run_example(FILE *out, const char *name, struct flt_example *example);
 
 
-#define flt_check_result(test, fmt, expected, actual) \
+#define flt_check_result(test, fmt, actual, expected) \
     do { \
         if ((expected) != (actual)) { \
             fprintf(stderr, "Unexpected result for " #test ":\n" \

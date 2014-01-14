@@ -45,6 +45,23 @@ flt_run_later(struct flt *flt, struct flt_task *task);
 
 
 /*-----------------------------------------------------------------------
+ * Task groups
+ */
+
+struct flt_task_group;
+
+struct flt_task_group *
+flt_current_group(struct flt *flt);
+
+void
+flt_run_after_group(struct flt *flt, struct flt_task_group *group,
+                    struct flt_task *task);
+
+void
+flt_run_after_current_group(struct flt *flt, struct flt_task *task);
+
+
+/*-----------------------------------------------------------------------
  * Fleets
  */
 

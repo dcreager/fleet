@@ -1,0 +1,39 @@
+% flt_task_group(3)
+
+# NAME
+
+flt_task_group -- Task groups
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| **struct flt_task_group**;
+|
+| struct flt_task_group \*
+| **flt_current_group**(struct flt \**flt*);
+|
+| void
+| **flt_run_after_group**(struct flt \**flt*, struct flt_task_group \**group*,
+|                     struct flt_task \**task*);
+|
+| void
+| **flt_run_after_current_group**(struct flt \**flt*, struct flt_task \**task*);
+
+
+# DESCRIPTION
+
+Each task in a fleet belongs to a *group*, which is represented by an
+**flt_task_group** instance.
+
+**flt_current_group**() returns the group that the currently executing task
+belongs to.
+
+**flt_run_after_group**() and **flt_run_after_current_group**() let you register
+an "after" task with a group.  This lets you detect when a group of tasks has
+finished executing; if the group has any after tasks, the group will
+automatically schedule those tasks to be executed when all of the tasks that
+belong to group have finished executing.  Note that this works even if the group
+isn't completely defined when you register the after task — you can add more
+tasks to the group while it's executing, and these new tasks must also finish
+before the group is considered finished.

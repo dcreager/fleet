@@ -21,6 +21,7 @@ void
 flt_run(struct flt *pflt, struct flt_task *task)
 {
     struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    task->group->active_tasks++;
     flt_dllist_add_to_head(&flt->ready, &task->item);
 }
 
@@ -28,6 +29,7 @@ void
 flt_run_later(struct flt *pflt, struct flt_task *task)
 {
     struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    task->group->active_tasks++;
     flt_dllist_add_to_tail(&flt->ready, &task->item);
 }
 
@@ -49,6 +51,7 @@ flt_loop(struct flt_priv *flt)
         struct flt_task  *task = container_of(head, struct flt_task, item);
         flt_task_run_all(flt, task);
         flt_dllist_remove(head);
+        flt_task_group_decrement(flt, task->group);
         flt_task_free(flt, task);
     }
 }
