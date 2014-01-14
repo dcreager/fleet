@@ -21,42 +21,36 @@ void
 flt_run(struct flt *pflt, struct flt_task *task)
 {
     struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
-    task->next = flt->ready;
-    flt->ready = task;
+    flt_dllist_add_to_head(&flt->ready, &task->item);
 }
 
 void
 flt_run_later(struct flt *pflt, struct flt_task *task)
 {
     struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
-    task->next = flt->later;
-    flt->later = task;
+    flt_dllist_add_to_tail(&flt->ready, &task->item);
 }
 
 
 static void
 flt_task_run_all(struct flt_priv *flt, struct flt_task *task)
 {
-    while (task->min < task->max) {
-        flt_task_run(&flt->public, task);
-        task->min++;
+    size_t  i;
+    for (i = task->min; i < task->max; i++) {
+        flt_task_run(&flt->public, task, i);
     }
 }
-
 
 static void
 flt_loop(struct flt_priv *flt)
 {
-    do {
-        while (!flt_ready_queue_is_empty(flt)) {
-            struct flt_task  *task = flt->ready;
-            flt->ready = task->next;
-            flt_task_run_all(flt, task);
-            flt_task_free(flt, task);
-        }
-        flt->ready = flt->later;
-        flt->later = NULL;
-    } while (!flt_ready_queue_is_empty(flt));
+    while (!flt_dllist_is_empty(&flt->ready)) {
+        struct flt_dllist_item  *head = flt_dllist_start(&flt->ready);
+        struct flt_task  *task = container_of(head, struct flt_task, item);
+        flt_task_run_all(flt, task);
+        flt_dllist_remove(head);
+        flt_task_free(flt, task);
+    }
 }
 
 

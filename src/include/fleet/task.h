@@ -11,6 +11,7 @@
 #define FLEET_TASK_H
 
 #include "fleet/internal.h"
+#include "fleet/dllist.h"
 
 
 struct flt_priv;
@@ -21,7 +22,7 @@ struct flt_priv;
  */
 
 struct flt_task {
-    struct flt_task  *next;
+    struct flt_dllist_item  item;
     flt_task  *func;
     void  *ud;
     size_t  min;
@@ -32,7 +33,7 @@ FLT_INTERNAL
 void
 flt_task_free(struct flt_priv *flt, struct flt_task *task);
 
-#define flt_task_run(f, t)  ((t)->func((f), (t)->ud, (t)->min))
+#define flt_task_run(f, t, i)  ((t)->func((f), (t)->ud, (i)))
 
 
 /*-----------------------------------------------------------------------
@@ -44,10 +45,9 @@ struct flt_priv {
     size_t  index;
     size_t  count;
     struct flt_fleet  *fleet;
-    struct flt_task  *ready;
-    struct flt_task  *later;
-    struct flt_task  *unused;
-    struct flt_task  *batches;
+    struct flt_dllist  ready;
+    struct flt_dllist  unused;
+    struct flt_dllist  batches;
 };
 
 FLT_INTERNAL
@@ -58,8 +58,6 @@ flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
 FLT_INTERNAL
 void
 flt_done(struct flt_priv *flt);
-
-#define flt_ready_queue_is_empty(flt)  ((flt)->ready == NULL)
 
 
 /*-----------------------------------------------------------------------

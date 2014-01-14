@@ -50,7 +50,7 @@ schedule_batch(struct flt *flt, void *ud, size_t i)
         j = max;
     } else {
         task = flt_task_new(flt, schedule_batch, ud, j);
-        flt_run(flt, task);
+        flt_run_later(flt, task);
     }
 
     /* TODO: This only works in a single-threaded scheduler, since we're not
