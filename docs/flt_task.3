@@ -10,7 +10,8 @@ typedef void
 .PD 0
 .P
 .PD
-\f[B]flt_task\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[]);
+\f[B]flt_task\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[], size_t
+\f[I]i\f[]);
 .SH DESCRIPTION
 .PP
 A \f[I]task\f[] is the smallest unit of computation in a fleet.
@@ -23,10 +24,11 @@ details.)
 Each task is represented by a \[lq]task function\[rq], which is the
 block of code that will execute when the fleet decides that it's time to
 run the task.
-The \f[I]ud\f[] input parameter can be used to communicate with other
-tasks; you provide the value to pass in to the task function when you
-schedule the task.
+The \f[I]ud\f[] and \f[I]i\f[] input parameters can be used to
+communicate with other tasks; you provide the values to pass in to the
+task function when you schedule the task.
 .PP
-In addition to the \f[I]ud\f[] input parameter, each task function is
-given a \f[B]flt\f[](3) instance, which can be used to schedule
-additional tasks using the \f[B]flt_run\f[](3) family of functions.
+In addition to the \f[I]ud\f[] and \f[I]i\f[] input parameters, each
+task function is given a \f[B]flt\f[](3) instance, which can be used to
+schedule additional tasks using the \f[B]flt_run\f[](3) family of
+functions.

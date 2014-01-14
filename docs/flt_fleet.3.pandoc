@@ -17,7 +17,8 @@ flt_fleet -- Fleets of tasks
 | **flt_fleet_free**(struct flt_fleet \**fleet*);
 |
 | void
-| **flt_fleet_run**(struct flt_fleet \**fleet*, flt_task \**task*, void \**ud*);
+| **flt_fleet_run**(struct flt_fleet \**fleet*, flt_task \**task*,
+|               void \**ud*, size_t *i*);
 
 
 # DESCRIPTION

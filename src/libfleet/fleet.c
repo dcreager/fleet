@@ -49,7 +49,8 @@ flt_task_batch_new(struct flt *flt)
 }
 
 struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func, void *ud, struct flt_task *after)
+flt_task_new(struct flt *flt, flt_task *func, void *ud,
+             size_t min, size_t max, struct flt_task *after)
 {
     struct flt_task  *task;
     if (unlikely(flt->unused == NULL)) {
@@ -59,6 +60,8 @@ flt_task_new(struct flt *flt, flt_task *func, void *ud, struct flt_task *after)
     flt->unused = task->next;
     task->func = func;
     task->ud = ud;
+    task->min = min;
+    task->max = max;
     task->after = after;
     return task;
 }

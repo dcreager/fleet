@@ -21,18 +21,21 @@ struct flt_task {
     struct flt_task  *next;
     flt_task  *func;
     void  *ud;
+    size_t  min;
+    size_t  max;
     struct flt_task  *after;
 };
 
 FLT_INTERNAL
 struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func, void *ud, struct flt_task *after);
+flt_task_new(struct flt *flt, flt_task *func, void *ud,
+             size_t min, size_t max, struct flt_task *after);
 
 FLT_INTERNAL
 void
 flt_task_free(struct flt *flt, struct flt_task *task);
 
-#define flt_task_run(f, t)  ((t)->func((f), (t)->ud))
+#define flt_task_run(f, t)  ((t)->func((f), (t)->ud, (t)->min))
 
 
 /*-----------------------------------------------------------------------

@@ -39,7 +39,7 @@ For example:
     };
 
     static void
-    parent_task(struct flt *flt, void *ud)
+    parent_task(struct flt *flt, void *ud, size_t i)
     {
         struct state  *state = ud;
         size_t  bytes_read;

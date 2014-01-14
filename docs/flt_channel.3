@@ -68,9 +68,17 @@ struct flt *\f[I]flt\f[],
 .PD
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[]);
 .PP
-| void &result \f[B]flt_channel_send_then\f[](struct flt_channel
-*\f[I]channel\f[], struct flt *\f[I]flt\f[], | void *\f[I]data\f[],
-flt_task *\f[I]second\f[], void *\f[I]sud\f[]);
+void
+.PD 0
+.P
+.PD
+\f[B]flt_channel_send_then\f[](struct flt_channel *\f[I]channel\f[],
+struct flt *\f[I]flt\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[],
+flt_task *\f[I]second\f[], void *\f[I]sud\f[], size_t \f[I]i\f[]);
 .SH DESCRIPTION
 .PP
 A \f[I]channel\f[] allows a \[lq]sender\[rq] task to schedule new

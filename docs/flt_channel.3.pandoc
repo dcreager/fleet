@@ -34,8 +34,8 @@ flt_channel -- Context-aware message passing
 |                       void \**data*);
 |
 | void
-&result **flt_channel_send_then**(struct flt_channel \**channel*, struct flt \**flt*,
-|                       void \**data*, flt_task \**second*, void \**sud*);
+| **flt_channel_send_then**(struct flt_channel \**channel*, struct flt \**flt*,
+|                       void \**data*, flt_task \**second*, void \**sud*, size_t *i*);
 
 
 # DESCRIPTION

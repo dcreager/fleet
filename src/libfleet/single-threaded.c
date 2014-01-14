@@ -18,29 +18,59 @@
  */
 
 void
-flt_run(struct flt *flt, flt_task *func, void *ud)
+flt_run(struct flt *flt, flt_task *func, void *ud, size_t i)
 {
-    struct flt_task  *task = flt_task_new(flt, func, ud, NULL);
+    struct flt_task  *task = flt_task_new(flt, func, ud, i, i+1, NULL);
     task->next = flt->ready;
     flt->ready = task;
 }
 
 void
-flt_run_later(struct flt *flt, flt_task *func, void *ud)
+flt_run_later(struct flt *flt, flt_task *func, void *ud, size_t i)
 {
-    struct flt_task  *task = flt_task_new(flt, func, ud, NULL);
+    struct flt_task  *task = flt_task_new(flt, func, ud, i, i+1, NULL);
     task->next = flt->later;
     flt->later = task;
 }
 
 void
-flt_then(struct flt *flt, flt_task *ffunc, void *fud,
-         flt_task *sfunc, void *sud)
+flt_then(struct flt *flt, flt_task *ffunc, void *fud, size_t fi,
+         flt_task *sfunc, void *sud, size_t si)
 {
-    struct flt_task  *second = flt_task_new(flt, sfunc, sud, NULL);
-    struct flt_task  *first = flt_task_new(flt, ffunc, fud, second);
+    struct flt_task  *second =
+        flt_task_new(flt, sfunc, sud, si, si+1, NULL);
+    struct flt_task  *first =
+        flt_task_new(flt, ffunc, fud, fi, fi+1, second);
     first->next = flt->ready;
     flt->ready = first;
+}
+
+
+void
+flt_run_many(struct flt *flt, flt_task *func, void *ud, size_t min, size_t max)
+{
+    struct flt_task  *task = flt_task_new(flt, func, ud, min, max, NULL);
+    task->next = flt->ready;
+    flt->ready = task;
+}
+
+void
+flt_run_many_later(struct flt *flt, flt_task *func, void *ud,
+                   size_t min, size_t max)
+{
+    struct flt_task  *task = flt_task_new(flt, func, ud, min, max, NULL);
+    task->next = flt->later;
+    flt->later = task;
+}
+
+
+static void
+flt_task_run_all(struct flt *flt, struct flt_task *task)
+{
+    while (task->min < task->max) {
+        flt_task_run(flt, task);
+        task->min++;
+    }
 }
 
 
@@ -53,7 +83,7 @@ flt_loop(struct flt *flt)
             flt->ready = task->next;
             do {
                 struct flt_task  *after = task->after;
-                flt_task_run(flt, task);
+                flt_task_run_all(flt, task);
                 flt_task_free(flt, task);
                 task = after;
             } while (task != NULL);
@@ -83,10 +113,10 @@ flt_fleet_free(struct flt_fleet *fleet)
 }
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud)
+flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t i)
 {
     struct flt  *flt = fleet->contexts;
-    struct flt_task  *task = flt_task_new(flt, func, ud, NULL);
+    struct flt_task  *task = flt_task_new(flt, func, ud, i, i+1, NULL);
     task->next = flt->ready;
     flt->ready = task;
     flt_loop(flt);

@@ -11,32 +11,56 @@ void
 .P
 .PD
 \f[B]flt_run\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]task\f[], void
-*\f[I]ud\f[]);
+*\f[I]ud\f[], size_t \f[I]i\f[]);
 .PP
 void
 .PD 0
 .P
 .PD
 \f[B]flt_run_later\f[](struct flt *\f[I]flt\f[], flt_task
-*\f[I]task\f[], void *\f[I]ud\f[]);
+*\f[I]task\f[], void *\f[I]ud\f[], size_t \f[I]i\f[]);
 .PP
 void
 .PD 0
 .P
 .PD
 \f[B]flt_return_to\f[](struct flt *\f[I]flt\f[], flt_task
-*\f[I]task\f[], void *\f[I]ud\f[]);
+*\f[I]task\f[], void *\f[I]ud\f[], size_t \f[I]i\f[]);
 .PP
 void
 .PD 0
 .P
 .PD
 \f[B]flt_then\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]first\f[],
-void *\f[I]fud\f[],
+void *\f[I]fud\f[], size_t \f[I]fi\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ flt_task *\f[I]second\f[], void *\f[I]sud\f[]);
+\ \ \ \ \ \ \ \ \ flt_task *\f[I]second\f[], void *\f[I]sud\f[], size_t
+\f[I]si\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_run_many\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]task\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], size_t \f[I]min\f[], size_t
+\f[I]max\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_run_many_later\f[](struct flt *\f[I]flt\f[], flt_task
+*\f[I]task\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], size_t
+\f[I]min\f[], size_t \f[I]max\f[]);
 .SH DESCRIPTION
 .PP
 The \f[B]flt_run\f[] family of functions let you schedule a new task to
@@ -74,7 +98,7 @@ static\ flt_task\ \ child_task;
 static\ flt_task\ \ parent_task;
 
 static\ void
-parent_task(struct\ flt\ *flt,\ void\ *ud)
+parent_task(struct\ flt\ *flt,\ void\ *ud,\ size_t\ i)
 {
 \ \ \ \ if\ (child_should_handle_work_instead)\ {
 \ \ \ \ \ \ \ \ return\ flt_return_to(flt,\ child_task,\ ud,\ i);
@@ -96,6 +120,14 @@ but doesn't allow \f[I]second\f[] to execute until \f[I]first\f[]
 finishes.
 This is your primary low\-level mechanism for enforcing \[lq]executes
 after\[rq] relationships between tasks.
+.PP
+The \f[B]many\f[] variants allow you to schedule a batch of tasks all at
+once.
+The scheduler will execute the \f[I]task\f[] function multiple times,
+all with the same value for their \f[I]ud\f[] parameter.
+Each task invocation will receive a different \f[I]i\f[] value; the task
+will be scheduled for each \f[I]i\f[] >= \f[I]min\f[] and <
+\f[I]max\f[].
 .PP
 For all of these functions, you must ensure that any \f[I]ud\f[] input
 parameters remain valid until the task has a chance to run.
