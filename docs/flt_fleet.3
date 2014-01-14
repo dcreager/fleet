@@ -25,12 +25,7 @@ void
 .P
 .PD
 \f[B]flt_fleet_run\f[](struct flt_fleet *\f[I]fleet\f[], flt_task
-*\f[I]task\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]u1\f[], void *\f[I]u2\f[], void
-*\f[I]u3\f[], void *\f[I]v4\f[]);
+*\f[I]task\f[], void *\f[I]ud\f[]);
 .SH DESCRIPTION
 .PP
 A \f[I]fleet\f[] is the top\-level container for all of the tasks in a
@@ -49,8 +44,8 @@ OS threads; see \f[B]flt\f[](3) for details.)
 This task can create other tasks, as needed.
 \f[B]flt_fleet_run\f[]() will not return until the root task, and all of
 the child tasks that it creates, have finished.
-As with all tasks, you can use the \f[I]uX\f[] parameters to pass data
-into the task.
+As with all tasks, you can use the \f[I]ud\f[] and \f[I]i\f[] parameters
+to pass data into the task.
 .PP
 You should not try to access the \f[B]flt_fleet\f[] instance from within
 any of the tasks that it runs.

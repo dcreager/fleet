@@ -30,22 +30,23 @@ run_native(void)
 }
 
 static flt_task  add_one;
+static flt_task  schedule;
 
 static void
-add_one(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+add_one(struct flt *flt, void *ud)
 {
-    uint64_t  i = (uintptr_t) u1;
+    uint64_t  i = (uintptr_t) ud;
     result += i;
 }
 
 static void
-schedule(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+schedule(struct flt *flt, void *ud)
 {
-    uint64_t  i;
     /* TODO: This only works in a single-threaded scheduler, since we're not
      * synchronizing updates to the result global variable. */
+    uint64_t  i;
     for (i = min; i < max; i++) {
-        flt_run(flt, add_one, (void *) i, NULL, NULL, NULL);
+        flt_run(flt, add_one, (void *) i);
     }
 }
 
@@ -53,7 +54,7 @@ static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    flt_fleet_run(fleet, schedule, NULL, NULL, NULL, NULL);
+    flt_fleet_run(fleet, schedule, NULL);
 }
 
 static int

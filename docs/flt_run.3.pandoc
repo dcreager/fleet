@@ -9,21 +9,17 @@ flt_run -- Scheduling tasks
 | **#include &lt;fleet.h&gt;**
 |
 | void
-| **flt_run**(struct flt \**flt*, flt_task \**task*,
-|         void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+| **flt_run**(struct flt \**flt*, flt_task \**task*, void \**ud*);
 |
 | void
-| **flt_run_later**(struct flt \**flt*, flt_task \**task*,
-|               void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+| **flt_run_later**(struct flt \**flt*, flt_task \**task*, void \**ud*);
 |
 | void
-| **flt_return_to**(struct flt \**flt*, flt_task \**task*,
-|               void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+| **flt_return_to**(struct flt \**flt*, flt_task \**task*, void \**ud*);
 |
 | void
-| **flt_then**(struct flt \**flt*,
-|          flt_task \**first*, void \**fu1*, void \**fu2*, void \**fu3*, void \**fu4*,
-|          flt_task \**second*, void \**su1*, void \**su2*, void \**su3*, void \**su4*);
+| **flt_then**(struct flt \**flt*, flt_task \**first*, void \**fud*,
+|          flt_task \**second*, void \**sud*);
 
 
 # DESCRIPTION
@@ -53,10 +49,10 @@ example:
     static flt_task  parent_task;
 
     static void
-    parent_task(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+    parent_task(struct flt *flt, void *ud)
     {
         if (child_should_handle_work_instead) {
-            return flt_return_to(flt, child_task, u1, u2, u3, u4);
+            return flt_return_to(flt, child_task, ud, i);
         } else {
             /* do some work */
         }
@@ -71,7 +67,7 @@ about when or where the child task will be executed.
 to execute until *first* finishes.  This is your primary low-level mechanism for
 enforcing "executes after" relationships between tasks.
 
-For all of these functions, you must ensure that any *uX* input parameters
+For all of these functions, you must ensure that any *ud* input parameters
 remain valid until the task has a chance to run.  Effectively, this means that
 the responsibility for freeing the inputs belongs to the new task, or to some
 subtask that it creates.
@@ -85,7 +81,7 @@ know when the child task completes, you must use **flt_then**() to schedule a
 ## Data sharing
 
 We don't place any restrictions on which particular values you pass in for the
-*uX* parameters for your tasks.  However, for the most part, we also don't make
+*ud* parameter for your tasks.  However, for the most part, we also don't make
 any guarantees about when or where a particular task is going to run.  That
 means that if you pass a pointer to a shared data instance to two tasks, it's
 entirely possible for those two tasks to execute simultaneously, in separate
@@ -103,10 +99,10 @@ synchronization primitives, so there are two ways you can accomplish this.
 
 The first is to use **flt_return_to**() to schedule a new task.  This function
 must be the last statement the parent task executes, so it's safe for the parent
-to pass any of its *uX* parameters on to the new child task: anything the parent
-does to the data must happen *before* the **flt_return_to**() call, and
-everything the child does to the data must happen *after*.  So this data sharing
-pattern is safe.
+to pass its *ud* parameter (or some portion of it) on to the new child task:
+anything the parent does to the data must happen *before* the
+**flt_return_to**() call, and everything the child does to the data must happen
+*after*.  So this data sharing pattern is safe.
 
 The other exception is when you use **flt_then**() to ensure that a *first* task
 finishes before a *second* task starts.  In this case, it's safe to share data

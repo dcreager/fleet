@@ -31,30 +31,31 @@ run_native(void)
 }
 
 static flt_task  add_one;
+static flt_task  schedule_batch;
 
 static void
-add_one(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+add_one(struct flt *flt, void *ud)
 {
-    uint64_t  i = (uintptr_t) u1;
+    uint64_t  i = (uintptr_t) ud;
     result += i;
 }
 
 static void
-schedule_batch(struct flt *flt, void *u1, void *u2, void *u3, void *u4)
+schedule_batch(struct flt *flt, void *ud)
 {
-    uint64_t  i = (uintptr_t) u1;
+    uint64_t  i = (uintptr_t) ud;
     uint64_t  j = i + batch_size;
 
     if (j > max) {
         j = max;
     } else {
-        flt_run(flt, schedule_batch, (void *) j, NULL, NULL, NULL);
+        flt_run(flt, schedule_batch, (void *) j);
     }
 
     /* TODO: This only works in a single-threaded scheduler, since we're not
      * synchronizing updates to the result global variable. */
     for (; i < j; i++) {
-        flt_run(flt, add_one, (void *) i, NULL, NULL, NULL);
+        flt_run(flt, add_one, (void *) i);
     }
 }
 
@@ -62,7 +63,7 @@ static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    flt_fleet_run(fleet, schedule_batch, (void *) min, NULL, NULL, NULL);
+    flt_fleet_run(fleet, schedule_batch, (void *) min);
 }
 
 static int

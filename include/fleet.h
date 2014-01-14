@@ -19,23 +19,20 @@ struct flt;
 struct flt_fleet;
 
 typedef void
-flt_task(struct flt *flt, void *u1, void *u2, void *u3, void *u4);
+flt_task(struct flt *flt, void *ud);
+
 
 void
-flt_run(struct flt *flt, flt_task *func,
-        void *u1, void *u2, void *u3, void *u4);
+flt_run(struct flt *flt, flt_task *func, void *ud);
 
 void
-flt_run_later(struct flt *flt, flt_task *func,
-              void *u1, void *u2, void *u3, void *u4);
+flt_run_later(struct flt *flt, flt_task *func, void *ud);
 
-#define flt_return_to(flt, task, u1, u2, u3, u4) \
-    ((task)((flt), (u1), (u2), (u3), (u4)))
+#define flt_return_to(flt, task, ud)  ((task)((flt), (ud)))
 
 void
-flt_then(struct flt *flt,
-         flt_task *first, void *fu1, void *fu2, void *fu3, void *fu4,
-         flt_task *second, void *su1, void *su2, void *su3, void *su4);
+flt_then(struct flt *flt, flt_task *first, void *fud,
+         flt_task *second, void *sud);
 
 
 struct flt_fleet *
@@ -45,8 +42,7 @@ void
 flt_fleet_free(struct flt_fleet *fleet);
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task *func,
-              void *u1, void *u2, void *u3, void *u4);
+flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud);
 
 
 #endif /* FLEET_H */

@@ -9,7 +9,7 @@ flt_task -- Tasks
 | **#include &lt;fleet.h&gt;**
 |
 | typedef void
-| **flt_task**(struct flt \**flt*, void \**u1*, void \**u2*, void \**u3*, void \**u4*);
+| **flt_task**(struct flt \**flt*, void \**ud*);
 
 
 # DESCRIPTION
@@ -20,10 +20,10 @@ task, the fleet will decide to run it at some point, in some execution context.
 function you use to schedule the task; see **flt_run**(3) for details.)
 
 Each task is represented by a "task function", which is the block of code that
-will execute when the fleet decides that it's time to run the task.  The *uX*
-input parameters can be used to communicate with other tasks.  The values to
-pass in for the *uX* input parameters are provided when you schedule the task.
+will execute when the fleet decides that it's time to run the task.  The *ud*
+input parameter can be used to communicate with other tasks; you provide the
+value to pass in to the task function when you schedule the task.
 
-In addition to the *uX* input parameters, each task function is given a
+In addition to the *ud* input parameter, each task function is given a
 **flt**(3) instance, which can be used to schedule additional tasks using the
 **flt_run**(3) family of functions.

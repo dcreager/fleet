@@ -49,9 +49,7 @@ flt_task_batch_new(struct flt *flt)
 }
 
 struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func,
-             void *u1, void *u2, void *u3, void *u4,
-             struct flt_task *after)
+flt_task_new(struct flt *flt, flt_task *func, void *ud, struct flt_task *after)
 {
     struct flt_task  *task;
     if (unlikely(flt->unused == NULL)) {
@@ -60,10 +58,7 @@ flt_task_new(struct flt *flt, flt_task *func,
     task = flt->unused;
     flt->unused = task->next;
     task->func = func;
-    task->u1 = u1;
-    task->u2 = u2;
-    task->u3 = u3;
-    task->u4 = u4;
+    task->ud = ud;
     task->after = after;
     return task;
 }

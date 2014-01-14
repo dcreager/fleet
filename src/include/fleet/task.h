@@ -20,25 +20,19 @@
 struct flt_task {
     struct flt_task  *next;
     flt_task  *func;
-    void  *u1;
-    void  *u2;
-    void  *u3;
-    void  *u4;
+    void  *ud;
     struct flt_task  *after;
 };
 
 FLT_INTERNAL
 struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func,
-             void *u1, void *u2, void *u3, void *u4,
-             struct flt_task *after);
+flt_task_new(struct flt *flt, flt_task *func, void *ud, struct flt_task *after);
 
 FLT_INTERNAL
 void
 flt_task_free(struct flt *flt, struct flt_task *task);
 
-#define flt_task_run(f, t) \
-    ((t)->func((f), (t)->u1, (t)->u2, (t)->u3, (t)->u4))
+#define flt_task_run(f, t)  ((t)->func((f), (t)->ud))
 
 
 /*-----------------------------------------------------------------------
