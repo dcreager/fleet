@@ -43,17 +43,20 @@ add_one(struct flt *flt, void *ud, size_t i)
 static void
 schedule_batch(struct flt *flt, void *ud, size_t i)
 {
+    struct flt_task  *task;
     uint64_t  j = i + batch_size;
 
     if (j > max) {
         j = max;
     } else {
-        flt_run(flt, schedule_batch, ud, j);
+        task = flt_task_new(flt, schedule_batch, ud, j);
+        flt_run(flt, task);
     }
 
     /* TODO: This only works in a single-threaded scheduler, since we're not
      * synchronizing updates to the result global variable. */
-    flt_run_many(flt, add_one, ud, i, j);
+    task = flt_bulk_task_new(flt, add_one, ud, i, j);
+    flt_run(flt, task);
 }
 
 static void

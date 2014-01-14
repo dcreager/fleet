@@ -25,7 +25,7 @@
 /* Create a new batch of task instances.  Link them all together via their next
  * fields */
 static void
-flt_task_batch_new(struct flt *flt)
+flt_task_batch_new(struct flt_priv *flt)
 {
     struct flt_task  *task = malloc(TASK_BATCH_SIZE);
     struct flt_task  *curr;
@@ -48,29 +48,51 @@ flt_task_batch_new(struct flt *flt)
     flt->unused = task + 1;
 }
 
-struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func, void *ud,
-             size_t min, size_t max, struct flt_task *after)
+static struct flt_task *
+flt_reuse_task(struct flt *pflt, flt_task *func, void *ud,
+               size_t min, size_t max);
+
+static struct flt_task *
+flt_create_task(struct flt *pflt, flt_task *func, void *ud,
+                size_t min, size_t max)
 {
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
     struct flt_task  *task;
-    if (unlikely(flt->unused == NULL)) {
-        flt_task_batch_new(flt);
-    }
+    flt_task_batch_new(flt);
+    flt->public.new_task = flt_reuse_task;
     task = flt->unused;
     flt->unused = task->next;
     task->func = func;
     task->ud = ud;
     task->min = min;
     task->max = max;
-    task->after = after;
+    return task;
+}
+
+static struct flt_task *
+flt_reuse_task(struct flt *pflt, flt_task *func, void *ud,
+               size_t min, size_t max)
+{
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_task  *task;
+    task = flt->unused;
+    flt->unused = task->next;
+    if (unlikely(task->next == NULL)) {
+        flt->public.new_task = flt_create_task;
+    }
+    task->func = func;
+    task->ud = ud;
+    task->min = min;
+    task->max = max;
     return task;
 }
 
 void
-flt_task_free(struct flt *flt, struct flt_task *task)
+flt_task_free(struct flt_priv *flt, struct flt_task *task)
 {
     task->next = flt->unused;
     flt->unused = task;
+    flt->public.new_task = flt_reuse_task;
 }
 
 
@@ -79,7 +101,8 @@ flt_task_free(struct flt *flt, struct flt_task *task)
  */
 
 void
-flt_init(struct flt *flt, struct flt_fleet *fleet, size_t index, size_t count)
+flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
+         size_t index, size_t count)
 {
     flt->index = index;
     flt->count = count;
@@ -88,6 +111,7 @@ flt_init(struct flt *flt, struct flt_fleet *fleet, size_t index, size_t count)
     flt->later = NULL;
     flt->unused = NULL;
     flt->batches = NULL;
+    flt->public.new_task = flt_create_task;
 }
 
 static void
@@ -102,7 +126,7 @@ flt_task_batch_list_done(struct flt_task *curr)
 }
 
 void
-flt_done(struct flt *flt)
+flt_done(struct flt_priv *flt)
 {
     flt_task_batch_list_done(flt->batches);
 }

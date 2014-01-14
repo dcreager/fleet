@@ -10,15 +10,15 @@ void
 .PD 0
 .P
 .PD
-\f[B]flt_run\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]task\f[], void
-*\f[I]ud\f[], size_t \f[I]i\f[]);
+\f[B]flt_run\f[](struct flt *\f[I]flt\f[], struct flt_task
+*\f[I]task\f[]);
 .PP
 void
 .PD 0
 .P
 .PD
-\f[B]flt_run_later\f[](struct flt *\f[I]flt\f[], flt_task
-*\f[I]task\f[], void *\f[I]ud\f[], size_t \f[I]i\f[]);
+\f[B]flt_run_later\f[](struct flt *\f[I]flt\f[], struct flt_task
+*\f[I]task\f[]);
 .PP
 void
 .PD 0
@@ -26,41 +26,6 @@ void
 .PD
 \f[B]flt_return_to\f[](struct flt *\f[I]flt\f[], flt_task
 *\f[I]task\f[], void *\f[I]ud\f[], size_t \f[I]i\f[]);
-.PP
-void
-.PD 0
-.P
-.PD
-\f[B]flt_then\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]first\f[],
-void *\f[I]fud\f[], size_t \f[I]fi\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ flt_task *\f[I]second\f[], void *\f[I]sud\f[], size_t
-\f[I]si\f[]);
-.PP
-void
-.PD 0
-.P
-.PD
-\f[B]flt_run_many\f[](struct flt *\f[I]flt\f[], flt_task *\f[I]task\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], size_t \f[I]min\f[], size_t
-\f[I]max\f[]);
-.PP
-void
-.PD 0
-.P
-.PD
-\f[B]flt_run_many_later\f[](struct flt *\f[I]flt\f[], flt_task
-*\f[I]task\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], size_t
-\f[I]min\f[], size_t \f[I]max\f[]);
 .SH DESCRIPTION
 .PP
 The \f[B]flt_run\f[] family of functions let you schedule a new task to
@@ -115,19 +80,9 @@ However, this is an optional optimization; like with \f[B]flt_run\f[](),
 we don't make any guarantees about when or where the child task will be
 executed.
 .PP
-\f[B]flt_then\f[]() schedules both \f[I]first\f[] and \f[I]second\f[],
-but doesn't allow \f[I]second\f[] to execute until \f[I]first\f[]
-finishes.
-This is your primary low\-level mechanism for enforcing \[lq]executes
-after\[rq] relationships between tasks.
-.PP
-The \f[B]many\f[] variants allow you to schedule a batch of tasks all at
-once.
-The scheduler will execute the \f[I]task\f[] function multiple times,
-all with the same value for their \f[I]ud\f[] parameter.
-Each task invocation will receive a different \f[I]i\f[] value; the task
-will be scheduled for each \f[I]i\f[] >= \f[I]min\f[] and <
-\f[I]max\f[].
+(Note that with \f[B]flt_return_to\f[](), you do \f[B]not\f[] create an
+\f[B]flt_task\f[] instance before scheduling the new task; you provide
+the task function and parameters directly.)
 .PP
 For all of these functions, you must ensure that any \f[I]ud\f[] input
 parameters remain valid until the task has a chance to run.
@@ -138,9 +93,8 @@ Note that all of these functions are allowed to return before the newly
 scheduled child task starts to execute.
 There isn't any way for the parent task to wait for newly scheduled
 child tasks to start or complete.
-If you need to know when the child task completes, you must use
-\f[B]flt_then\f[]() to schedule a \f[I]second\f[] child task, which will
-be executed when the first one finishes.
+If you need to know when the child task completes, you must use a
+\f[B]TODO\f[] task group.
 .SS Data sharing
 .PP
 We don't place any restrictions on which particular values you pass in
@@ -172,10 +126,3 @@ portion of it) on to the new child task: anything the parent does to the
 data must happen \f[I]before\f[] the \f[B]flt_return_to\f[]() call, and
 everything the child does to the data must happen \f[I]after\f[].
 So this data sharing pattern is safe.
-.PP
-The other exception is when you use \f[B]flt_then\f[]() to ensure that a
-\f[I]first\f[] task finishes before a \f[I]second\f[] task starts.
-In this case, it's safe to share data between those two tasks, since the
-scheduler guarantees that the two tasks can't possibly execute at the
-same time, and so they can't possibly access the shared data
-simultaneously.

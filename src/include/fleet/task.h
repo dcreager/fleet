@@ -13,6 +13,9 @@
 #include "fleet/internal.h"
 
 
+struct flt_priv;
+
+
 /*-----------------------------------------------------------------------
  * Tasks
  */
@@ -23,17 +26,11 @@ struct flt_task {
     void  *ud;
     size_t  min;
     size_t  max;
-    struct flt_task  *after;
 };
 
 FLT_INTERNAL
-struct flt_task *
-flt_task_new(struct flt *flt, flt_task *func, void *ud,
-             size_t min, size_t max, struct flt_task *after);
-
-FLT_INTERNAL
 void
-flt_task_free(struct flt *flt, struct flt_task *task);
+flt_task_free(struct flt_priv *flt, struct flt_task *task);
 
 #define flt_task_run(f, t)  ((t)->func((f), (t)->ud, (t)->min))
 
@@ -42,7 +39,8 @@ flt_task_free(struct flt *flt, struct flt_task *task);
  * Execution contexts
  */
 
-struct flt {
+struct flt_priv {
+    struct flt  public;
     size_t  index;
     size_t  count;
     struct flt_fleet  *fleet;
@@ -54,11 +52,12 @@ struct flt {
 
 FLT_INTERNAL
 void
-flt_init(struct flt *flt, struct flt_fleet *fleet, size_t index, size_t count);
+flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
+         size_t index, size_t count);
 
 FLT_INTERNAL
 void
-flt_done(struct flt *flt);
+flt_done(struct flt_priv *flt);
 
 #define flt_ready_queue_is_empty(flt)  ((flt)->ready == NULL)
 
@@ -69,7 +68,7 @@ flt_done(struct flt *flt);
 
 struct flt_fleet {
     size_t  count;
-    struct flt  *contexts;
+    struct flt_priv  *contexts;
 };
 
 

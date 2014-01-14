@@ -67,18 +67,6 @@ struct flt *\f[I]flt\f[],
 .P
 .PD
 \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[]);
-.PP
-void
-.PD 0
-.P
-.PD
-\f[B]flt_channel_send_then\f[](struct flt_channel *\f[I]channel\f[],
-struct flt *\f[I]flt\f[],
-.PD 0
-.P
-.PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]data\f[],
-flt_task *\f[I]second\f[], void *\f[I]sud\f[], size_t \f[I]i\f[]);
 .SH DESCRIPTION
 .PP
 A \f[I]channel\f[] allows a \[lq]sender\[rq] task to schedule new
@@ -128,9 +116,6 @@ provides a hint to the fleet scheduler that other existing tasks should
 be allowed to run before the receiver processes this message.
 \f[B]flt_channel_return_to\f[]() uses \f[B]flt_return_to\f[](3), which
 means it must only be used as the last statement of the sending task.
-\f[B]flt_channel_send_then\f[]() uses \f[B]flt_then\f[](3), which allows
-you to provide a \f[I]second\f[] task, which will be scheduled to run
-after the receiver task finishes.
 .SH RETURN VALUES
 .PP
 \f[B]flt_channel_new\f[]() will always return a valid new channel.

@@ -35,9 +35,11 @@ static void
 add_one(struct flt *flt, void *ud, size_t i)
 {
     if (i < max) {
+        struct flt_task  *task;
         uint64_t  *result = ud;
         *result += i;
-        return flt_run(flt, add_one, result, i+1);
+        task = flt_task_new(flt, add_one, result, i+1);
+        flt_run(flt, task);
     }
 }
 

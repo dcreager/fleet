@@ -42,9 +42,11 @@ add_one(struct flt *flt, void *ud, size_t i)
 static void
 schedule(struct flt *flt, void *ud, size_t min)
 {
+    struct flt_task  *task;
     /* TODO: This only works in a single-threaded scheduler, since we're not
      * synchronizing updates to the result global variable. */
-    flt_run_many(flt, add_one, ud, min, max);
+    task = flt_bulk_task_new(flt, add_one, ud, min, max);
+    flt_run(flt, task);
 }
 
 static void

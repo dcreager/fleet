@@ -18,32 +18,37 @@
  */
 
 struct flt;
-struct flt_fleet;
+struct flt_task;
 
 typedef void
 flt_task(struct flt *flt, void *ud, size_t i);
 
+struct flt {
+    struct flt_task *
+    (*new_task)(struct flt *, flt_task *, void *, size_t, size_t);
+};
+
+#define flt_task_new(flt, func, ud, i) \
+    ((flt)->new_task((flt), (func), (ud), (i), (i)+1))
+
+#define flt_bulk_task_new(flt, func, ud, min, max) \
+    ((flt)->new_task((flt), (func), (ud), (min), (max)))
+
 
 void
-flt_run(struct flt *flt, flt_task *func, void *ud, size_t i);
+flt_run(struct flt *flt, struct flt_task *task);
 
 void
-flt_run_later(struct flt *flt, flt_task *func, void *ud, size_t i);
+flt_run_later(struct flt *flt, struct flt_task *task);
 
 #define flt_return_to(flt, task, ud, i)  ((task)((flt), (ud), (i)))
 
-void
-flt_then(struct flt *flt, flt_task *first, void *fud, size_t fi,
-         flt_task *second, void *sud, size_t si);
 
+/*-----------------------------------------------------------------------
+ * Fleets
+ */
 
-void
-flt_run_many(struct flt *flt, flt_task *func, void *ud, size_t min, size_t max);
-
-void
-flt_run_many_later(struct flt *flt, flt_task *func, void *ud,
-                   size_t min, size_t max);
-
+struct flt_fleet;
 
 struct flt_fleet *
 flt_fleet_new(void);

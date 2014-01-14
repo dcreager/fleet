@@ -9,25 +9,13 @@ flt_run -- Scheduling tasks
 | **#include &lt;fleet.h&gt;**
 |
 | void
-| **flt_run**(struct flt \**flt*, flt_task \**task*, void \**ud*, size_t *i*);
+| **flt_run**(struct flt \**flt*, struct flt_task \**task*);
 |
 | void
-| **flt_run_later**(struct flt \**flt*, flt_task \**task*, void \**ud*, size_t *i*);
+| **flt_run_later**(struct flt \**flt*, struct flt_task \**task*);
 |
 | void
 | **flt_return_to**(struct flt \**flt*, flt_task \**task*, void \**ud*, size_t *i*);
-|
-| void
-| **flt_then**(struct flt \**flt*, flt_task \**first*, void \**fud*, size_t *fi*,
-|          flt_task \**second*, void \**sud*, size_t *si*);
-|
-| void
-| **flt_run_many**(struct flt \**flt*, flt_task \**task*,
-|              void \**ud*, size_t *min*, size_t *max*);
-|
-| void
-| **flt_run_many_later**(struct flt \**flt*, flt_task \**task*,
-|                    void \**ud*, size_t *min*, size_t *max*);
 
 
 # DESCRIPTION
@@ -71,14 +59,9 @@ without passing through the fleet's scheduler first.  However, this is an
 optional optimization; like with **flt_run**(), we don't make any guarantees
 about when or where the child task will be executed.
 
-**flt_then**() schedules both *first* and *second*, but doesn't allow *second*
-to execute until *first* finishes.  This is your primary low-level mechanism for
-enforcing "executes after" relationships between tasks.
-
-The **many** variants allow you to schedule a batch of tasks all at once.  The
-scheduler will execute the *task* function multiple times, all with the same
-value for their *ud* parameter.  Each task invocation will receive a different
-*i* value; the task will be scheduled for each *i* >= *min* and < *max*.
+(Note that with **flt_return_to**(), you do **not** create an **flt_task**
+instance before scheduling the new task; you provide the task function and
+parameters directly.)
 
 For all of these functions, you must ensure that any *ud* input parameters
 remain valid until the task has a chance to run.  Effectively, this means that
@@ -88,8 +71,7 @@ subtask that it creates.
 Note that all of these functions are allowed to return before the newly
 scheduled child task starts to execute.  There isn't any way for the parent task
 to wait for newly scheduled child tasks to start or complete.  If you need to
-know when the child task completes, you must use **flt_then**() to schedule a
-*second* child task, which will be executed when the first one finishes.
+know when the child task completes, you must use a **TODO** task group.
 
 ## Data sharing
 
@@ -116,9 +98,3 @@ to pass its *ud* parameter (or some portion of it) on to the new child task:
 anything the parent does to the data must happen *before* the
 **flt_return_to**() call, and everything the child does to the data must happen
 *after*.  So this data sharing pattern is safe.
-
-The other exception is when you use **flt_then**() to ensure that a *first* task
-finishes before a *second* task starts.  In this case, it's safe to share data
-between those two tasks, since the scheduler guarantees that the two tasks can't
-possibly execute at the same time, and so they can't possibly access the shared
-data simultaneously.
