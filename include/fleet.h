@@ -24,6 +24,9 @@ typedef void
 flt_task(struct flt *flt, void *ud, size_t i);
 
 struct flt {
+    size_t  index;
+    size_t  count;
+
     struct flt_task *
     (*new_task)(struct flt *, flt_task *, void *, size_t, size_t);
 };
@@ -75,6 +78,46 @@ flt_fleet_free(struct flt_fleet *fleet);
 
 void
 flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t i);
+
+
+/*-----------------------------------------------------------------------
+ * Context-local data
+ */
+
+struct flt_local {
+    void  **instances;
+};
+
+typedef void *
+flt_local_new_f(void *ud);
+
+typedef void
+flt_local_free_f(void *ud, void *instance);
+
+struct flt_local *
+flt_local_new(struct flt *flt, void *ud,
+              flt_local_new_f *new_instance,
+              flt_local_free_f *free_instance);
+
+void
+flt_local_free(struct flt_local *local);
+
+void *
+flt_local_get(struct flt *flt, struct flt_local *local);
+
+#define flt_local_get(flt, local) \
+    ((local)->instances[(flt)->index])
+
+typedef void
+flt_local_visit_f(struct flt *flt, void *ud, void *instance);
+
+#define flt_local_for_each(flt, local, ud, visit) \
+    do { \
+        size_t  __i; \
+        for (__i = 0; __i < (flt)->count; __i++) { \
+            (visit)((flt), (ud), (local)->instances[__i]); \
+        } \
+    } while (0)
 
 
 #endif /* FLEET_H */

@@ -45,8 +45,27 @@ void *
 .PD 0
 .P
 .PD
-\f[B]flt_local_get\f[](struct flt_local *\f[I]local\f[], struct flt
-*\f[I]flt\f[]);
+\f[B]flt_local_get\f[](struct flt *\f[I]flt\f[], struct flt_local
+*\f[I]local\f[]);
+.PP
+typedef void
+.PD 0
+.P
+.PD
+\f[B]flt_local_visit_f\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[],
+void *\f[I]instance\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_local_for_each\f[](struct flt *\f[I]flt\f[], struct flt_local
+*\f[I]local\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[],
+flt_local_visit_f *\f[I]visitor\f[]);
 .SH DESCRIPTION
 .PP
 The \f[B]flt_local\f[] API is analogous to thread\-local storage (TLS)
@@ -62,8 +81,11 @@ instance associated with a particular execution context.
 This new manager will use \f[I]new_instance\f[] and
 \f[I]free_instance\f[] to allocate and deallocate the data instances
 that it manages.
-It will ensure that there is one instance for each execution context of
-the fleet that \f[I]flt\f[] belongs to.
+Your \f[I]new_instance\f[] callback will be called exactly once for each
+execution context in the fleet.
+Note that your allocation function is given a pointer to the
+\f[B]flt\f[](3) instance that it belongs to, in case you need to store
+this somewhere in your data structure.
 .PP
 \f[B]flt_local_free\f[]() frees an \f[B]flt_local\f[] manager, and any
 instances that it has created.
@@ -74,22 +96,21 @@ done using it.
 \f[B]flt_local_get\f[]() returns the data instance for a particular
 execution context.
 .PP
-The manager is allowed to instantiate the data instances lazily \[em]
-i.e., to wait to create an instance until \f[B]flt_local_get\f[]() is
-called for the first time for a particular execution context.
-.PP
-Note that your allocation function is given a pointer to the
-\f[B]flt\f[](3) instance that it belongs to, in case you need to store
-this somewhere in your data structure.
+\f[B]flt_local_for_each\f[]() calls a \f[I]visitor\f[] function once for
+each of the context\-specific instances in the \f[B]flt_local\f[]
+manager.
+This will cause the current task to access data that is technically
+owned by some other execution context; it is your responsibility to make
+sure this happens in a thread\-safe manner.
+You will usually use this function in a cleanup task to \[lq]merge\[rq]
+partial results that were calculated in each execution context, using
+one of the \f[B]flt_run_after_group\f[](3) family of functions.
 .SH RETURN VALUES
 .PP
 \f[B]flt_local_new\f[]() will always return a valid new
 \f[B]flt_local\f[] manager.
 .PP
-Your \f[B]flt_local_new_f\f[] callback should always return a valid data
-instance.
-If it returns \f[C]NULL\f[], this will be returned as the result of
-\f[B]flt_local_get\f[](); however, if you then call
-\f[B]flt_local_get\f[]() another time for the same execution context, we
-will try to allocate a data instance again, by calling the callback an
-additional time.
+Your \f[I]new_instance\f[] callback can return any pointer value you
+want, including \f[C]NULL\f[].
+Your \f[I]free_instance\f[] callback must be able to handle any value
+returned by your \f[I]new_instance\f[] callback.

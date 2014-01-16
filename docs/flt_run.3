@@ -94,7 +94,7 @@ scheduled child task starts to execute.
 There isn't any way for the parent task to wait for newly scheduled
 child tasks to start or complete.
 If you need to know when the child task completes, you must use a
-\f[B]TODO\f[] task group.
+\f[B]flt_task_group\f[](3).
 .SS Data sharing
 .PP
 We don't place any restrictions on which particular values you pass in

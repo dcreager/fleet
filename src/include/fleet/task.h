@@ -67,8 +67,6 @@ flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
 
 struct flt_priv {
     struct flt  public;
-    size_t  index;
-    size_t  count;
     struct flt_fleet  *fleet;
     struct flt_dllist  ready;
     struct flt_dllist  unused;

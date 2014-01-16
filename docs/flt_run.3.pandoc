@@ -71,7 +71,7 @@ subtask that it creates.
 Note that all of these functions are allowed to return before the newly
 scheduled child task starts to execute.  There isn't any way for the parent task
 to wait for newly scheduled child tasks to start or complete.  If you need to
-know when the child task completes, you must use a **TODO** task group.
+know when the child task completes, you must use a **flt_task_group**(3).
 
 ## Data sharing
 

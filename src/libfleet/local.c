@@ -1,0 +1,57 @@
+/* -*- coding: utf-8 -*-
+ * ----------------------------------------------------------------------
+ * Copyright © 2014, RedJack, LLC.
+ * All rights reserved.
+ *
+ * Please see the COPYING file in this distribution for license details.
+ * ----------------------------------------------------------------------
+ */
+
+#include <stdlib.h>
+
+#include "fleet.h"
+#include "fleet/internal.h"
+#include "fleet/task.h"
+
+
+/*-----------------------------------------------------------------------
+ * Context-local data
+ */
+
+struct flt_local_priv {
+    struct flt_local  public;
+    size_t  instance_count;
+    void  *ud;
+    flt_local_free_f  *free_instance;
+};
+
+struct flt_local *
+flt_local_new(struct flt *pflt, void *ud,
+              flt_local_new_f *new_instance,
+              flt_local_free_f *free_instance)
+{
+    size_t  i;
+    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_local_priv  *local = malloc(sizeof(struct flt_local_priv));
+    local->instance_count = flt->public.count;
+    local->ud = ud;
+    local->free_instance = free_instance;
+    local->public.instances = calloc(flt->public.count, sizeof(void *));
+    for (i = 0; i < flt->public.count; i++) {
+        local->public.instances[i] = new_instance(ud);
+    }
+    return &local->public;
+}
+
+void
+flt_local_free(struct flt_local *plocal)
+{
+    size_t  i;
+    struct flt_local_priv  *local =
+        container_of(plocal, struct flt_local_priv, public);
+    for (i = 0; i < local->instance_count; i++) {
+        local->free_instance(local->ud, local->public.instances[i]);
+    }
+    free(local->public.instances);
+    free(local);
+}

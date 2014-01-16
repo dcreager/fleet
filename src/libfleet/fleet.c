@@ -161,8 +161,8 @@ flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
          size_t index, size_t count)
 {
     struct flt_task_group  *group;
-    flt->index = index;
-    flt->count = count;
+    flt->public.index = index;
+    flt->public.count = count;
     flt->fleet = fleet;
     flt->public.new_task = flt_create_task;
     flt_dllist_init(&flt->ready);
