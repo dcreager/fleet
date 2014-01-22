@@ -13,6 +13,8 @@
 #include "libcork/core.h"
 #include "libcork/ds.h"
 
+#include "fleet/threads.h"
+
 
 struct flt_priv;
 
@@ -66,6 +68,7 @@ flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
  */
 
 struct flt_priv {
+    struct flt_spinlock  lock;
     struct flt  public;
     struct flt_fleet  *fleet;
     struct cork_dllist  ready;

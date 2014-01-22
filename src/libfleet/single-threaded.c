@@ -35,25 +35,59 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
 }
 
 
-static void
-flt_task_run_all(struct flt_priv *flt, struct flt_task *task)
+#define FLT_ROUND_SIZE  32
+
+static size_t
+flt_pop_and_run_one(struct flt_priv *flt, size_t max_count)
 {
-    size_t  i;
-    for (i = task->min; i < task->max; i++) {
-        flt_task_run(&flt->public, task, i);
+    struct cork_dllist_item  *head = cork_dllist_start(&flt->ready);
+    struct flt_task  *task = cork_container_of(head, struct flt_task, item);
+    size_t  max = task->min + max_count;
+
+    if (max < task->max) {
+        /* There are more iterations in this bulk task than we can execute
+         * during this lock acquisition.  So only execute the first max_count
+         * iterations. */
+        size_t  i;
+        for (i = task->min; i < max; i++) {
+            flt_task_run(&flt->public, task, i);
+        }
+        task->min = max;
+        return max_count;
+    } else {
+        /* We can execute all of the iterations in this bulk task without
+         * exceeding our allotment for this lock acquisition.  So execute them
+         * all and retire the task. */
+        size_t  i;
+        size_t  count;
+        max = task->max;
+        for (i = task->min; i < max; i++) {
+            flt_task_run(&flt->public, task, i);
+        }
+        count = max - task->min;
+        cork_dllist_remove(head);
+        flt_task_group_decrement(flt, task->group);
+        flt_task_free(flt, task);
+        return count;
     }
 }
 
 static void
 flt_loop(struct flt_priv *flt)
 {
-    while (!cork_dllist_is_empty(&flt->ready)) {
-        struct cork_dllist_item  *head = cork_dllist_start(&flt->ready);
-        struct flt_task  *task = cork_container_of(head, struct flt_task, item);
-        flt_task_run_all(flt, task);
-        cork_dllist_remove(head);
-        flt_task_group_decrement(flt, task->group);
-        flt_task_free(flt, task);
+    while (true) {
+        size_t  max_count = FLT_ROUND_SIZE;
+        flt_spinlock_lock(&flt->lock);
+        while (max_count > 0) {
+            if (cork_dllist_is_empty(&flt->ready)) {
+                flt_spinlock_unlock(&flt->lock);
+                return;
+            } else {
+                size_t  executed_count = flt_pop_and_run_one(flt, max_count);
+                max_count -= executed_count;
+            }
+        }
+        flt_spinlock_unlock(&flt->lock);
     }
 }
 

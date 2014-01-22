@@ -160,6 +160,7 @@ flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
          size_t index, size_t count)
 {
     struct flt_task_group  *group;
+    flt_spinlock_init(&flt->lock);
     flt->public.index = index;
     flt->public.count = count;
     flt->fleet = fleet;
