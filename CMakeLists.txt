@@ -29,7 +29,10 @@ endif(VERSION_RESULT)
 
 string(REGEX REPLACE "-dev.*" "-dev" BASE_VERSION "${VERSION}")
 
-find_package(PkgConfig)
+#-----------------------------------------------------------------------
+# Prereqs
+
+find_package(Threads)
 
 #-----------------------------------------------------------------------
 # Check for building on Tilera

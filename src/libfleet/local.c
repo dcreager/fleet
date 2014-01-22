@@ -7,10 +7,10 @@
  * ----------------------------------------------------------------------
  */
 
-#include <stdlib.h>
+#include "libcork/core.h"
+#include "libcork/ds.h"
 
 #include "fleet.h"
-#include "fleet/internal.h"
 #include "fleet/task.h"
 
 
@@ -31,12 +31,12 @@ flt_local_new(struct flt *pflt, void *ud,
               flt_local_free_f *free_instance)
 {
     size_t  i;
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
-    struct flt_local_priv  *local = malloc(sizeof(struct flt_local_priv));
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_local_priv  *local = cork_new(struct flt_local_priv);
     local->instance_count = flt->public.count;
     local->ud = ud;
     local->free_instance = free_instance;
-    local->public.instances = calloc(flt->public.count, sizeof(void *));
+    local->public.instances = cork_calloc(flt->public.count, sizeof(void *));
     for (i = 0; i < flt->public.count; i++) {
         local->public.instances[i] = new_instance(ud);
     }
@@ -48,7 +48,7 @@ flt_local_free(struct flt_local *plocal)
 {
     size_t  i;
     struct flt_local_priv  *local =
-        container_of(plocal, struct flt_local_priv, public);
+        cork_container_of(plocal, struct flt_local_priv, public);
     for (i = 0; i < local->instance_count; i++) {
         local->free_instance(local->ud, local->public.instances[i]);
     }

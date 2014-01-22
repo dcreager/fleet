@@ -10,8 +10,8 @@
 #ifndef FLEET_TASK_H
 #define FLEET_TASK_H
 
-#include "fleet/internal.h"
-#include "fleet/dllist.h"
+#include "libcork/core.h"
+#include "libcork/ds.h"
 
 
 struct flt_priv;
@@ -22,7 +22,7 @@ struct flt_priv;
  */
 
 struct flt_task {
-    struct flt_dllist_item  item;
+    struct cork_dllist_item  item;
     struct flt_task_group  *group;
     flt_task  *func;
     void  *ud;
@@ -30,7 +30,7 @@ struct flt_task {
     size_t  max;
 };
 
-FLT_INTERNAL
+CORK_LOCAL
 void
 flt_task_free(struct flt_priv *flt, struct flt_task *task);
 
@@ -42,21 +42,21 @@ flt_task_free(struct flt_priv *flt, struct flt_task *task);
  */
 
 struct flt_task_group {
-    struct flt_dllist_item  item;
-    struct flt_dllist  after;
+    struct cork_dllist_item  item;
+    struct cork_dllist  after;
     size_t  active_tasks;
     size_t  after_tasks;
 };
 
-FLT_INTERNAL
+CORK_LOCAL
 struct flt_task_group *
 flt_task_group_new(struct flt_priv *flt);
 
-FLT_INTERNAL
+CORK_LOCAL
 void
 flt_task_group_free(struct flt_priv *flt, struct flt_task_group *group);
 
-FLT_INTERNAL
+CORK_LOCAL
 void
 flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
 
@@ -68,18 +68,18 @@ flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
 struct flt_priv {
     struct flt  public;
     struct flt_fleet  *fleet;
-    struct flt_dllist  ready;
-    struct flt_dllist  unused;
-    struct flt_dllist  batches;
-    struct flt_dllist  groups;
+    struct cork_dllist  ready;
+    struct cork_dllist  unused;
+    struct cork_dllist  batches;
+    struct cork_dllist  groups;
 };
 
-FLT_INTERNAL
+CORK_LOCAL
 void
 flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
          size_t index, size_t count);
 
-FLT_INTERNAL
+CORK_LOCAL
 void
 flt_done(struct flt_priv *flt);
 
@@ -87,8 +87,8 @@ static inline
 struct flt_task_group *
 flt_current_group_priv(struct flt_priv *flt)
 {
-    struct flt_dllist_item  *head = flt_dllist_start(&flt->groups);
-    return container_of(head, struct flt_task_group, item);
+    struct cork_dllist_item  *head = cork_dllist_start(&flt->groups);
+    return cork_container_of(head, struct flt_task_group, item);
 }
 
 

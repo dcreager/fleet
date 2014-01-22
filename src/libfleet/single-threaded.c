@@ -7,7 +7,8 @@
  * ----------------------------------------------------------------------
  */
 
-#include <stdlib.h>
+#include "libcork/core.h"
+#include "libcork/ds.h"
 
 #include "fleet.h"
 #include "fleet/task.h"
@@ -20,17 +21,17 @@
 void
 flt_run(struct flt *pflt, struct flt_task *task)
 {
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     task->group->active_tasks++;
-    flt_dllist_add_to_head(&flt->ready, &task->item);
+    cork_dllist_add_to_head(&flt->ready, &task->item);
 }
 
 void
 flt_run_later(struct flt *pflt, struct flt_task *task)
 {
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     task->group->active_tasks++;
-    flt_dllist_add_to_tail(&flt->ready, &task->item);
+    cork_dllist_add_to_tail(&flt->ready, &task->item);
 }
 
 
@@ -46,11 +47,11 @@ flt_task_run_all(struct flt_priv *flt, struct flt_task *task)
 static void
 flt_loop(struct flt_priv *flt)
 {
-    while (!flt_dllist_is_empty(&flt->ready)) {
-        struct flt_dllist_item  *head = flt_dllist_start(&flt->ready);
-        struct flt_task  *task = container_of(head, struct flt_task, item);
+    while (!cork_dllist_is_empty(&flt->ready)) {
+        struct cork_dllist_item  *head = cork_dllist_start(&flt->ready);
+        struct flt_task  *task = cork_container_of(head, struct flt_task, item);
         flt_task_run_all(flt, task);
-        flt_dllist_remove(head);
+        cork_dllist_remove(head);
         flt_task_group_decrement(flt, task->group);
         flt_task_free(flt, task);
     }
@@ -60,9 +61,9 @@ flt_loop(struct flt_priv *flt)
 struct flt_fleet *
 flt_fleet_new(void)
 {
-    struct flt_fleet  *fleet = malloc(sizeof(struct flt_fleet));
+    struct flt_fleet  *fleet = cork_new(struct flt_fleet);
     fleet->count = 1;
-    fleet->contexts = malloc(sizeof(struct flt_priv));
+    fleet->contexts = cork_new(struct flt_priv);
     flt_init(fleet->contexts, fleet, 0, 1);
     return fleet;
 }

@@ -7,11 +7,10 @@
  * ----------------------------------------------------------------------
  */
 
-#include <stdlib.h>
+#include "libcork/core.h"
+#include "libcork/ds.h"
 
 #include "fleet.h"
-#include "fleet/dllist.h"
-#include "fleet/internal.h"
 #include "fleet/task.h"
 
 
@@ -29,13 +28,13 @@ static struct flt_task *
 flt_task_batch_new(struct flt_priv *flt)
 {
     size_t  i;
-    struct flt_task  *task = malloc(TASK_BATCH_SIZE);
+    struct flt_task  *task = cork_malloc(TASK_BATCH_SIZE);
     struct flt_task  *first;
     struct flt_task  *curr;
 
     /* The first task in the batch is reserved, and is used to keep track of the
      * batches that are owned by this context. */
-    flt_dllist_add_to_tail(&flt->batches, &task->item);
+    cork_dllist_add_to_tail(&flt->batches, &task->item);
 
     /* This whole operation was kicked off because someone wants to create a new
      * task instance; the second instance is the batch is the one we'll use for
@@ -48,7 +47,7 @@ flt_task_batch_new(struct flt_priv *flt)
      * track of the batches separately so that we can free everything safely
      * when the fleet is freed. */
     for (i = 2, curr = first + 1; i < TASK_BATCH_COUNT; i++, curr++) {
-        flt_dllist_add_to_tail(&flt->unused, &curr->item);
+        cork_dllist_add_to_tail(&flt->unused, &curr->item);
     }
 
     return first;
@@ -68,7 +67,7 @@ static struct flt_task *
 flt_create_task(struct flt *pflt, flt_task *func, void *ud,
                 size_t min, size_t max)
 {
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task  *task = flt_task_batch_new(flt);
     flt->public.new_task = flt_reuse_task;
     task->func = func;
@@ -83,13 +82,13 @@ static struct flt_task *
 flt_reuse_task(struct flt *pflt, flt_task *func, void *ud,
                size_t min, size_t max)
 {
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
-    struct flt_dllist_item  *head = flt_dllist_start(&flt->unused);
-    struct flt_task  *task = container_of(head, struct flt_task, item);
-    if (unlikely(flt_dllist_is_end(&flt->unused, head->next))) {
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct cork_dllist_item  *head = cork_dllist_start(&flt->unused);
+    struct flt_task  *task = cork_container_of(head, struct flt_task, item);
+    if (CORK_UNLIKELY(cork_dllist_is_end(&flt->unused, head->next))) {
         flt->public.new_task = flt_create_task;
     }
-    flt_dllist_remove(head);
+    cork_dllist_remove(head);
     task->func = func;
     task->ud = ud;
     task->min = min;
@@ -101,7 +100,7 @@ flt_reuse_task(struct flt *pflt, flt_task *func, void *ud,
 void
 flt_task_free(struct flt_priv *flt, struct flt_task *task)
 {
-    flt_dllist_add_to_head(&flt->unused, &task->item);
+    cork_dllist_add_to_head(&flt->unused, &task->item);
     flt->public.new_task = flt_reuse_task;
 }
 
@@ -113,10 +112,10 @@ flt_task_free(struct flt_priv *flt, struct flt_task *task)
 struct flt_task_group *
 flt_task_group_new(struct flt_priv *flt)
 {
-    struct flt_task_group  *group = malloc(sizeof(struct flt_task_group));
+    struct flt_task_group  *group = cork_new(struct flt_task_group);
     group->active_tasks = 0;
     group->after_tasks = 0;
-    flt_dllist_init(&group->after);
+    cork_dllist_init(&group->after);
     return group;
 }
 
@@ -130,8 +129,8 @@ void
 flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group)
 {
     if (--group->active_tasks == 0) {
-        if (!flt_dllist_is_empty(&group->after)) {
-            flt_dllist_add_list_to_head(&flt->ready, &group->after);
+        if (!cork_dllist_is_empty(&group->after)) {
+            cork_dllist_add_list_to_head(&flt->ready, &group->after);
         }
     }
 }
@@ -140,15 +139,15 @@ void
 flt_run_after_group(struct flt *flt, struct flt_task_group *group,
                     struct flt_task *task)
 {
-    flt_dllist_add_to_tail(&group->after, &task->item);
+    cork_dllist_add_to_tail(&group->after, &task->item);
 }
 
 void
 flt_run_after_current_group(struct flt *pflt, struct flt_task *task)
 {
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group  *group = flt_current_group_priv(flt);
-    flt_dllist_add_to_tail(&group->after, &task->item);
+    cork_dllist_add_to_tail(&group->after, &task->item);
 }
 
 
@@ -165,40 +164,33 @@ flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
     flt->public.count = count;
     flt->fleet = fleet;
     flt->public.new_task = flt_create_task;
-    flt_dllist_init(&flt->ready);
-    flt_dllist_init(&flt->unused);
-    flt_dllist_init(&flt->batches);
-    flt_dllist_init(&flt->groups);
+    cork_dllist_init(&flt->ready);
+    cork_dllist_init(&flt->unused);
+    cork_dllist_init(&flt->batches);
+    cork_dllist_init(&flt->groups);
     group = flt_task_group_new(flt);
-    flt_dllist_add_to_head(&flt->groups, &group->item);
+    cork_dllist_add_to_head(&flt->groups, &group->item);
 }
 
 static void
-flt_task_batch_list_done(struct flt_priv *flt, struct flt_dllist *list)
+flt_task_batch_list_done(struct flt_priv *flt, struct cork_dllist *list)
 {
-    struct flt_dllist_item  *curr;
-    struct flt_dllist_item  *next;
-    for (curr = flt_dllist_start(list);
-         !flt_dllist_is_end(list, curr); curr = next) {
-        struct flt_task  *task = container_of(curr, struct flt_task, item);
-        next = curr->next;
+    struct cork_dllist_item  *curr;
+    struct cork_dllist_item  *next;
+    struct flt_task  *task;
+    cork_dllist_foreach(list, curr, next, struct flt_task, task, item) {
         flt_task_batch_free(flt, task);
-        curr = next;
     }
 }
 
 static void
-flt_task_group_list_done(struct flt_priv *flt, struct flt_dllist *list)
+flt_task_group_list_done(struct flt_priv *flt, struct cork_dllist *list)
 {
-    struct flt_dllist_item  *curr;
-    struct flt_dllist_item  *next;
-    for (curr = flt_dllist_start(list);
-         !flt_dllist_is_end(list, curr); curr = next) {
-        struct flt_task_group  *group =
-            container_of(curr, struct flt_task_group, item);
-        next = curr->next;
+    struct cork_dllist_item  *curr;
+    struct cork_dllist_item  *next;
+    struct flt_task_group  *group;
+    cork_dllist_foreach(list, curr, next, struct flt_task_group, group, item) {
         flt_task_group_free(flt, group);
-        curr = next;
     }
 }
 
@@ -212,6 +204,6 @@ flt_done(struct flt_priv *flt)
 struct flt_task_group *
 flt_current_group(struct flt *pflt)
 {
-    struct flt_priv  *flt = container_of(pflt, struct flt_priv, public);
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     return flt_current_group_priv(flt);
 }
