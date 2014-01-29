@@ -20,23 +20,28 @@
 
 struct flt_local_priv {
     struct flt_local  public;
+    size_t  padded_size;
     void  *ud;
-    flt_local_free_f  *free_instance;
+    flt_local_done_f  *done_instance;
 };
 
 struct flt_local *
-flt_local_new(struct flt *pflt, void *ud,
-              flt_local_new_f *new_instance,
-              flt_local_free_f *free_instance)
+flt_local_new_size(struct flt *pflt, size_t instance_size, void *ud,
+                   flt_local_init_f *init_instance,
+                   flt_local_done_f *done_instance)
 {
     size_t  i;
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_local_priv  *local = cork_new(struct flt_local_priv);
+    size_t  padded_size = flt_round_to_cache_line(instance_size);
+    char  *instance;
     local->ud = ud;
-    local->free_instance = free_instance;
-    local->public.instances = cork_calloc(flt->public.count, sizeof(void *));
-    for (i = 0; i < flt->public.count; i++) {
-        local->public.instances[i] = new_instance(pflt, ud);
+    local->done_instance = done_instance;
+    local->padded_size = padded_size;
+    instance = cork_calloc(flt->public.count, padded_size);
+    local->public.instances = instance;
+    for (i = 0; i < flt->public.count; i++, instance += padded_size) {
+        init_instance(pflt, ud, instance);
     }
     return &local->public;
 }
@@ -48,8 +53,10 @@ flt_local_free(struct flt *pflt, struct flt_local *plocal)
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_local_priv  *local =
         cork_container_of(plocal, struct flt_local_priv, public);
-    for (i = 0; i < flt->public.count; i++) {
-        local->free_instance(pflt, local->ud, local->public.instances[i]);
+    char  *instance;
+    for (i = 0, instance = local->public.instances; i < flt->public.count;
+         i++, instance += local->padded_size) {
+        local->done_instance(pflt, local->ud, instance);
     }
     free(local->public.instances);
     free(local);

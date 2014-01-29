@@ -109,19 +109,18 @@ flt_task_free(struct flt_priv *flt, struct flt_task *task)
  * Task groups
  */
 
-static void *
-flt_task_group_ctx__new(struct flt *pflt, void *ud)
+static void
+flt_task_group_ctx__init(struct flt *pflt, void *ud, void *vctx)
 {
-    struct flt_task_group_ctx  *ctx = cork_new(struct flt_task_group_ctx);
+    struct flt_task_group_ctx  *ctx = vctx;
     ctx->group = ud;
     ctx->after = NULL;
     cork_dllist_init(&ctx->tasks);
     ctx->task_count = 0;
-    return ctx;
 }
 
 static void
-flt_task_group_ctx__free(struct flt *pflt, void *ud, void *vctx)
+flt_task_group_ctx__done(struct flt *pflt, void *ud, void *vctx)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group_ctx  *ctx = vctx;
@@ -133,8 +132,6 @@ flt_task_group_ctx__free(struct flt *pflt, void *ud, void *vctx)
     cork_dllist_foreach(&ctx->tasks, curr, next, struct flt_task, task, item) {
         flt_task_free(flt, task);
     }
-
-    free(ctx);
 }
 
 struct flt_task_group *
@@ -143,8 +140,8 @@ flt_task_group_new(struct flt *pflt)
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group  *group = cork_new(struct flt_task_group);
     group->ctxs = flt_local_new
-        (&flt->public, group,
-         flt_task_group_ctx__new, flt_task_group_ctx__free);
+        (&flt->public, struct flt_task_group_ctx, group,
+         flt_task_group_ctx__init, flt_task_group_ctx__done);
     flt_counter_init(&group->active_ctx_count);
     group->next_after = NULL;
     group->state = FLT_TASK_GROUP_STOPPED;
@@ -168,7 +165,7 @@ flt_task_group_start(struct flt *pflt, struct flt_task_group *group)
     /* Move all of the group's pending tasks into the current execution
      * context's ready queue (regardless of which context they used to belong
      * to). */
-    flt_local_foreach(pflt, group->ctxs, i, ctx) {
+    flt_local_foreach(pflt, group->ctxs, i, struct flt_task_group_ctx, ctx) {
         cork_dllist_add_list_to_head(&flt->ready, &ctx->tasks);
     }
     group->state = FLT_TASK_GROUP_STARTED;
@@ -178,8 +175,8 @@ void
 flt_task_group_add(struct flt *pflt, struct flt_task_group *group,
                    struct flt_task *task)
 {
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task_group_ctx  *ctx = flt_local_get(&flt->public, group->ctxs);
+    struct flt_task_group_ctx  *ctx =
+        flt_local_get(pflt, group->ctxs, struct flt_task_group_ctx);
     task->group = group;
     cork_dllist_add_to_head(&ctx->tasks, &task->item);
     if (ctx->task_count++ == 0) {
@@ -194,8 +191,8 @@ void
 flt_task_group_run_after(struct flt *pflt, struct flt_task_group *group,
                          struct flt_task_group *after)
 {
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task_group_ctx  *ctx = flt_local_get(&flt->public, group->ctxs);
+    struct flt_task_group_ctx  *ctx =
+        flt_local_get(pflt, group->ctxs, struct flt_task_group_ctx);
     after->next_after = ctx->after;
     ctx->after = after;
 }
@@ -205,7 +202,8 @@ flt_task_group_run_after_current(struct flt *pflt, struct flt_task_group *after)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group  *current_group = flt_current_group(flt);
-    struct flt_task_group_ctx  *ctx = flt_local_get(pflt, current_group->ctxs);
+    struct flt_task_group_ctx  *ctx =
+        flt_local_get(pflt, current_group->ctxs, struct flt_task_group_ctx);
     after->next_after = ctx->after;
     ctx->after = after;
 }
@@ -215,7 +213,8 @@ flt_task_group_fire_afters(struct flt_priv *flt, struct flt_task_group *group)
 {
     size_t  i;
     struct flt_task_group_ctx  *ctx;
-    flt_local_foreach(&flt->public, group->ctxs, i, ctx) {
+    flt_local_foreach(&flt->public, group->ctxs, i,
+                      struct flt_task_group_ctx, ctx) {
         struct flt_task_group  *after;
         for (after = ctx->after; after != NULL; after = after->next_after) {
             flt_task_group_start(&flt->public, after);
@@ -226,7 +225,8 @@ flt_task_group_fire_afters(struct flt_priv *flt, struct flt_task_group *group)
 void
 flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group)
 {
-    struct flt_task_group_ctx  *ctx = flt_local_get(&flt->public, group->ctxs);
+    struct flt_task_group_ctx  *ctx =
+        flt_local_get(&flt->public, group->ctxs, struct flt_task_group_ctx);
     if (--ctx->task_count == 0) {
         /* This task group has no more tasks in this context, so the context is
          * no longer active.  Decrement the active context count, and if *none*
@@ -311,7 +311,8 @@ flt_run(struct flt *pflt, struct flt_task *task)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group  *current_group = flt_current_group(flt);
-    struct flt_task_group_ctx  *ctx = flt_local_get(pflt, current_group->ctxs);
+    struct flt_task_group_ctx  *ctx =
+        flt_local_get(pflt, current_group->ctxs, struct flt_task_group_ctx);
 
     task->group = current_group;
 
@@ -332,7 +333,8 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group  *current_group = flt_current_group(flt);
-    struct flt_task_group_ctx  *ctx = flt_local_get(pflt, current_group->ctxs);
+    struct flt_task_group_ctx  *ctx =
+        flt_local_get(pflt, current_group->ctxs, struct flt_task_group_ctx);
 
     task->group = current_group;
 

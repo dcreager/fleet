@@ -30,9 +30,6 @@
 #endif
 
 
-#define FLT_CACHE_LINE_SIZE  64
-
-
 #define flt_pause(count) \
     do { \
         if (count < 10) { \

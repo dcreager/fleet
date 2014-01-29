@@ -13,6 +13,13 @@
 #include <stddef.h>
 
 
+#define FLT_CACHE_LINE_SIZE  64
+
+#define flt_round_to_cache_line(sz) \
+    (((sz) % FLT_CACHE_LINE_SIZE) == 0? (sz): \
+     (((sz) / FLT_CACHE_LINE_SIZE) + 1) * FLT_CACHE_LINE_SIZE)
+
+
 /*-----------------------------------------------------------------------
  * Tasks
  */
@@ -95,42 +102,44 @@ flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t i);
  */
 
 struct flt_local {
-    void  **instances;
+    void  *instances;
 };
 
-typedef void *
-flt_local_new_f(struct flt *flt, void *ud);
+typedef void
+flt_local_init_f(struct flt *flt, void *ud, void *instance);
 
 typedef void
-flt_local_free_f(struct flt *flt, void *ud, void *instance);
+flt_local_done_f(struct flt *flt, void *ud, void *instance);
 
 struct flt_local *
-flt_local_new(struct flt *flt, void *ud,
-              flt_local_new_f *new_instance,
-              flt_local_free_f *free_instance);
+flt_local_new_size(struct flt *flt, size_t instance_size, void *ud,
+                   flt_local_init_f *init_instance,
+                   flt_local_done_f *done_instance);
+
+#define flt_local_new(flt, type, ud, init, done) \
+    flt_local_new_size((flt), sizeof(type), (ud), (init), (done))
 
 void
 flt_local_free(struct flt *flt, struct flt_local *local);
 
-void *
-flt_local_get(struct flt *flt, struct flt_local *local);
+#define flt_local_get_index(flt, local, type, i) \
+    ((type *) \
+     ((char *) (local)->instances + \
+      (i) * flt_round_to_cache_line(sizeof(type))))
 
-#define flt_local_get(flt, local) \
-    ((local)->instances[(flt)->index])
+#define flt_local_get(flt, local, type) \
+    flt_local_get_index(flt, local, type, (flt)->index)
 
-typedef void
-flt_local_visit_f(struct flt *flt, void *ud, void *instance);
+#define flt_local_foreach(flt, local, i, type, inst) \
+    for ((i) = 0, (inst) = (local)->instances; (i) < (flt)->count; \
+         (i)++, (inst)++)
 
-#define flt_local_foreach(flt, local, i, inst) \
-    for ((i) = 0, (inst) = (local)->instances[0]; (i) < (flt)->count; \
-         (inst) = (local)->instances[++(i)])
-
-#define flt_local_visit(flt, local, ud, visit) \
+#define flt_local_visit(flt, local, type, visit, ...) \
     do { \
         size_t  __i; \
-        void  *__instance; \
-        flt_local_foreach(flt, local, __i, __instance) { \
-            (visit)((flt), (ud), __instance); \
+        type  *__instance; \
+        flt_local_foreach(flt, local, __i, type, __instance) { \
+            (visit)((flt), __instance, __VA_ARGS__); \
         } \
     } while (0)
 
