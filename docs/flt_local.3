@@ -39,7 +39,8 @@ void
 .PD 0
 .P
 .PD
-\f[B]flt_local_free\f[](struct flt_local *\f[I]local\f[]);
+\f[B]flt_local_free\f[](struct flt *\f[I]flt\f[], struct flt_local
+*\f[I]local\f[]);
 .PP
 void *
 .PD 0
@@ -59,13 +60,25 @@ void
 .PD 0
 .P
 .PD
-\f[B]flt_local_for_each\f[](struct flt *\f[I]flt\f[], struct flt_local
+\f[B]flt_local_visit\f[](struct flt *\f[I]flt\f[], struct flt_local
 *\f[I]local\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[],
-flt_local_visit_f *\f[I]visitor\f[]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], flt_local_visit_f
+*\f[I]visitor\f[]);
+.PP
+\f[B]flt_local_foreach\f[](struct flt *\f[I]flt\f[], struct flt_local
+*\f[I]local\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ size_t &\f[I]i\f[], TYPE
+&*\f[I]instance\f[])
+.PD 0
+.P
+.PD
+\ \ \ \ STATEMENT
 .SH DESCRIPTION
 .PP
 The \f[B]flt_local\f[] API is analogous to thread\-local storage (TLS)
@@ -96,15 +109,31 @@ done using it.
 \f[B]flt_local_get\f[]() returns the data instance for a particular
 execution context.
 .PP
-\f[B]flt_local_for_each\f[]() calls a \f[I]visitor\f[] function once for
+\f[B]flt_local_visit\f[]() calls a \f[I]visitor\f[] function once for
 each of the context\-specific instances in the \f[B]flt_local\f[]
 manager.
-This will cause the current task to access data that is technically
-owned by some other execution context; it is your responsibility to make
-sure this happens in a thread\-safe manner.
+\f[B]flt_local_foreach\f[]() is a custom control structure that will
+execute a statement once for each context\-specific instance.
+For instance:
+.IP
+.nf
+\f[C]
+size_t\ \ i;
+struct\ my_type\ \ *ctx;
+flt_local_foreach(flt,\ local,\ i,\ ctx)\ {
+\ \ \ \ /*\ Within\ the\ block,\ `ctx`\ is\ one\ of\ the\ context\-specific\ instances,\ and
+\ \ \ \ \ *\ `i`\ is\ its\ index.\ */
+}
+\f[]
+.fi
+.PP
+Both \f[B]flt_local_visit\f[]() and \f[B]flt_local_foreach\f[]() will
+cause the current task to access data that is technically owned by some
+other execution context; it is your responsibility to make sure this
+happens in a thread\-safe manner.
 You will usually use this function in a cleanup task to \[lq]merge\[rq]
 partial results that were calculated in each execution context, using
-one of the \f[B]flt_run_after_group\f[](3) family of functions.
+one of the \f[B]flt_task_group_run_after\f[](3) family of functions.
 .SH RETURN VALUES
 .PP
 \f[B]flt_local_new\f[]() will always return a valid new

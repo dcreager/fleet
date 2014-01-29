@@ -33,25 +33,6 @@
 #define FLT_CACHE_LINE_SIZE  64
 
 
-/*-----------------------------------------------------------------------
- * Spin locks
- */
-
-#define FLT_SPINLOCK_AVAILABLE  ((unsigned int) -1)
-
-struct flt_spinlock {
-    union {
-        volatile unsigned int  current_owner;
-        uint8_t  padding[FLT_CACHE_LINE_SIZE];
-    } _;
-};
-
-#define FLT_SPINLOCK_INIT()  { 0 }
-#define flt_spinlock_init(lock) \
-    do { \
-        (lock)->_.current_owner = 0; \
-    } while (0)
-
 #define flt_pause(count) \
     do { \
         if (count < 10) { \
@@ -78,21 +59,155 @@ struct flt_spinlock {
         count++; \
     } while (0)
 
+
+/*-----------------------------------------------------------------------
+ * Memory barriers
+ */
+
+/* __sync_synchronize doesn't emit a memory fence instruction in GCC <= 4.3.  It
+ * also implements a full memory barrier.  So, on x86_64, which has separate
+ * lfence and sfence instructions, we use hard-coded assembly, regardless of GCC
+ * version.  On i386, we can't guarantee that lfence/sfence are available, so we
+ * have to use a full memory barrier anyway.  We use the GCC intrinsics if we
+ * can; otherwise, we fall back on assembly.
+ *
+ * [1] http://gcc.gnu.org/bugzilla/show_bug.cgi?id=36793
+ */
+
+#if defined(__GNUC__) && defined(__x86_64__)
+
+CORK_ATTR_UNUSED
+static inline void
+flt_read_barrier(void)
+{
+    __asm__ __volatile__ ("lfence" ::: "memory");
+}
+
+CORK_ATTR_UNUSED
+static inline void
+flt_write_barrier(void)
+{
+    __asm__ __volatile__ ("sfence" ::: "memory");
+}
+
+#elif (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__) > 40300
+
+CORK_ATTR_UNUSED
+static inline void
+flt_read_barrier(void)
+{
+    __sync_synchronize();
+}
+
+CORK_ATTR_UNUSED
+static inline void
+flt_write_barrier(void)
+{
+    __sync_synchronize();
+}
+
+#elif defined(__GNUC__) && defined(__i386__)
+
+CORK_ATTR_UNUSED
+static inline void
+flt_read_barrier(void)
+{
+    int  a = 0;
+    __asm__ __volatile__ ("lock orl $0, %0" : "+m" (a));
+}
+
+CORK_ATTR_UNUSED
+static inline void
+flt_write_barrier(void)
+{
+    int  a = 0;
+    __asm__ __volatile__ ("lock orl $0, %0" : "+m" (a));
+}
+
+#else
+#error "No memory barrier implementation!"
+#endif
+
+
+/*-----------------------------------------------------------------------
+ * Cache-line-padded integers
+ */
+
+struct flt_padded_uint {
+    union {
+        volatile unsigned int  value;
+        uint8_t  padding[FLT_CACHE_LINE_SIZE];
+    } _;
+};
+
+#define flt_padded_uint_cas(pui, oldv, newv) \
+    (cork_uint_cas(&(pui)->_.value, (oldv), (newv)))
+
+/* Not thread-safe */
+#define flt_padded_uint_set_fast(pui, v) \
+    ((pui)->_.value = (v))
+
+#define flt_padded_uint_set(pui, v) \
+    ((pui)->_.value = (v), flt_write_barrier())
+
+
+/*-----------------------------------------------------------------------
+ * Counters
+ */
+
+struct flt_counter {
+    struct flt_padded_uint  value;
+};
+
+#define FLT_COUNTER_INIT()  {{0}}
+#define flt_counter_init(ctr) \
+    do { \
+        (ctr)->value._.value = 0; \
+    } while (0)
+
+/* Returns true if the decrement brings the counter to 0. */
+#define flt_counter_dec(ctr) \
+    (cork_uint_atomic_sub(&(ctr)->value._.value, 1) == 0)
+
+#define flt_counter_inc(ctr) \
+    ((void) cork_uint_atomic_add(&(ctr)->value._.value, 1))
+
+/* Not thread-safe */
+#define flt_counter_set(ctr, v) \
+    ((ctr)->value._.value = (v))
+
+
+/*-----------------------------------------------------------------------
+ * Spin locks
+ */
+
+#define FLT_SPINLOCK_AVAILABLE  ((unsigned int) -1)
+
+struct flt_spinlock {
+    struct flt_padded_uint  current_owner;
+};
+
+#define FLT_SPINLOCK_INIT()  {{0}}
+#define flt_spinlock_init(lock) \
+    do { \
+        (lock)->current_owner._.value = 0; \
+    } while (0)
+
 #define flt_spinlock_lock(lock) \
     do { \
         unsigned int  count = 0; \
         unsigned int  prev; \
         do { \
-            while (CORK_UNLIKELY((lock)->_.current_owner != 0)) { \
+            while (CORK_UNLIKELY((lock)->current_owner._.value != 0)) { \
                 flt_pause(count); \
             } \
-            prev = cork_uint_cas(&(lock)->_.current_owner, 0, 1); \
+            prev = cork_uint_cas(&(lock)->current_owner._.value, 0, 1); \
         } while (CORK_UNLIKELY(prev != 0)); \
     } while (0)
 
 #define flt_spinlock_unlock(lock) \
     do { \
-        (lock)->_.current_owner = 0; \
+        (lock)->current_owner._.value = 0; \
     } while (0)
 
 

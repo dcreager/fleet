@@ -9,6 +9,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "fleet.h"
 #include "examples.h"
@@ -17,7 +18,6 @@
 static uint64_t  min;
 static uint64_t  max;
 static uint64_t  result;
-static uint64_t  temp_result;
 
 static void
 run_native(void)
@@ -31,32 +31,58 @@ run_native(void)
 }
 
 static flt_task  add_one;
-static flt_task  copy_result;
+static flt_task  merge_batches;
 static flt_task  schedule;
 
 static void
 add_one(struct flt *flt, void *ud, size_t i)
 {
-    uint64_t  *result = ud;
+    struct flt_local  *local = ud;
+    uint64_t  *result = flt_local_get(flt, local);
     *result += i;
 }
 
 static void
-copy_result(struct flt *flt, void *ud, size_t i)
+merge_one_batch(struct flt *flt, void *ud, void *vinstance)
 {
-    uint64_t  *temp_result = ud;
-    result = *temp_result;
+    uint64_t  *batch_count = vinstance;
+    result += *batch_count;
+}
+
+static void
+merge_batches(struct flt *flt, void *ud, size_t i)
+{
+    struct flt_local  *local = ud;
+    flt_local_visit(flt, local, NULL, merge_one_batch);
+    flt_local_free(flt, local);
+}
+
+static void *
+uint64_new(struct flt *flt, void *ud)
+{
+    return calloc(1, sizeof(uint64_t));
+}
+
+static void
+uint64_free(struct flt *flt, void *ud, void *instance)
+{
+    free(instance);
 }
 
 static void
 schedule(struct flt *flt, void *ud, size_t min)
 {
+    struct flt_local  *local;
+    struct flt_task_group  *group;
     struct flt_task  *task;
-    task = flt_task_new(flt, copy_result, ud, 0);
-    flt_run_after_current_group(flt, task);
-    /* TODO: This only works in a single-threaded scheduler, since we're not
-     * synchronizing updates to the result global variable. */
-    task = flt_bulk_task_new(flt, add_one, ud, min, max);
+
+    local = flt_local_new(flt, NULL, uint64_new, uint64_free);
+    group = flt_task_group_new(flt);
+    flt_task_group_run_after_current(flt, group);
+    task = flt_task_new(flt, merge_batches, local, 0);
+    flt_task_group_add(flt, group, task);
+
+    task = flt_bulk_task_new(flt, add_one, local, min, max);
     flt_run(flt, task);
 }
 
@@ -64,8 +90,7 @@ static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    temp_result = 0;
-    flt_fleet_run(fleet, schedule, &temp_result, min);
+    flt_fleet_run(fleet, schedule, NULL, min);
 }
 
 static int

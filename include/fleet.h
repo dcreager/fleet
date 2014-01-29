@@ -54,14 +54,24 @@ flt_run_later(struct flt *flt, struct flt_task *task);
 struct flt_task_group;
 
 struct flt_task_group *
-flt_current_group(struct flt *flt);
+flt_task_group_new(struct flt *flt);
+
+/* Cannot be called after the group is running.  Thread-safe for `group` */
+void
+flt_task_group_add(struct flt *flt, struct flt_task_group *group,
+                   struct flt_task *task);
 
 void
-flt_run_after_group(struct flt *flt, struct flt_task_group *group,
-                    struct flt_task *task);
+flt_task_group_start(struct flt *flt, struct flt_task_group *group);
 
+/* Thread-safe for `group`, but not for `after` */
 void
-flt_run_after_current_group(struct flt *flt, struct flt_task *task);
+flt_task_group_run_after(struct flt *flt, struct flt_task_group *group,
+                         struct flt_task_group *after);
+
+/* Not thread-safe for `after` */
+void
+flt_task_group_run_after_current(struct flt *flt, struct flt_task_group *after);
 
 
 /*-----------------------------------------------------------------------
@@ -89,10 +99,10 @@ struct flt_local {
 };
 
 typedef void *
-flt_local_new_f(void *ud);
+flt_local_new_f(struct flt *flt, void *ud);
 
 typedef void
-flt_local_free_f(void *ud, void *instance);
+flt_local_free_f(struct flt *flt, void *ud, void *instance);
 
 struct flt_local *
 flt_local_new(struct flt *flt, void *ud,
@@ -100,7 +110,7 @@ flt_local_new(struct flt *flt, void *ud,
               flt_local_free_f *free_instance);
 
 void
-flt_local_free(struct flt_local *local);
+flt_local_free(struct flt *flt, struct flt_local *local);
 
 void *
 flt_local_get(struct flt *flt, struct flt_local *local);
@@ -111,11 +121,16 @@ flt_local_get(struct flt *flt, struct flt_local *local);
 typedef void
 flt_local_visit_f(struct flt *flt, void *ud, void *instance);
 
-#define flt_local_for_each(flt, local, ud, visit) \
+#define flt_local_foreach(flt, local, i, inst) \
+    for ((i) = 0, (inst) = (local)->instances[0]; (i) < (flt)->count; \
+         (inst) = (local)->instances[++(i)])
+
+#define flt_local_visit(flt, local, ud, visit) \
     do { \
         size_t  __i; \
-        for (__i = 0; __i < (flt)->count; __i++) { \
-            (visit)((flt), (ud), (local)->instances[__i]); \
+        void  *__instance; \
+        flt_local_foreach(flt, local, __i, __instance) { \
+            (visit)((flt), (ud), __instance); \
         } \
     } while (0)
 

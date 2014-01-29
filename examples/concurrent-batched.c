@@ -19,7 +19,6 @@ static uint64_t  min;
 static uint64_t  max;
 static uint64_t  batch_size;
 static uint64_t  result;
-static uint64_t  temp_result;
 
 static void
 run_native(void)
@@ -74,18 +73,18 @@ static void
 merge_batches(struct flt *flt, void *ud, size_t i)
 {
     struct flt_local  *local = ud;
-    flt_local_for_each(flt, local, NULL, merge_one_batch);
-    flt_local_free(local);
+    flt_local_visit(flt, local, NULL, merge_one_batch);
+    flt_local_free(flt, local);
 }
 
 static void *
-uint64_new(void *ud)
+uint64_new(struct flt *flt, void *ud)
 {
     return calloc(1, sizeof(uint64_t));
 }
 
 static void
-uint64_free(void *ud, void *instance)
+uint64_free(struct flt *flt, void *ud, void *instance)
 {
     free(instance);
 }
@@ -94,10 +93,13 @@ static void
 schedule(struct flt *flt, void *ud, size_t min)
 {
     struct flt_local  *local;
+    struct flt_task_group  *group;
     struct flt_task  *task;
     local = flt_local_new(flt, NULL, uint64_new, uint64_free);
+    group = flt_task_group_new(flt);
+    flt_task_group_run_after_current(flt, group);
     task = flt_task_new(flt, merge_batches, local, 0);
-    flt_run_after_current_group(flt, task);
+    flt_task_group_add(flt, group, task);
     return flt_return_to(flt, schedule_batch, local, min);
 }
 
@@ -105,8 +107,7 @@ static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    temp_result = 0;
-    flt_fleet_run(fleet, schedule, &temp_result, min);
+    flt_fleet_run(fleet, schedule, NULL, min);
 }
 
 static int

@@ -48,7 +48,6 @@ set(LIBCORK_SRC
 set(LIBFLEET_SRC
     libfleet/fleet.c
     libfleet/local.c
-    libfleet/single-threaded.c
 )
 
 # Update the VERSION and SOVERSION properties below according to the following
