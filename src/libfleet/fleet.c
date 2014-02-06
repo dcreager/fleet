@@ -117,6 +117,7 @@ flt_task_group_ctx__init(struct flt *pflt, void *ud, void *vctx)
     ctx->after = NULL;
     cork_dllist_init(&ctx->tasks);
     ctx->task_count = 0;
+    ctx->execution_count = 0;
 }
 
 static void
@@ -167,6 +168,7 @@ flt_task_group_start(struct flt *pflt, struct flt_task_group *group)
      * to). */
     flt_local_foreach(pflt, group->ctxs, i, struct flt_task_group_ctx, ctx) {
         cork_dllist_add_list_to_head(&flt->ready, &ctx->tasks);
+        flt->execution_count += ctx->execution_count;
     }
     group->state = FLT_TASK_GROUP_STARTED;
 }
@@ -179,6 +181,7 @@ flt_task_group_add(struct flt *pflt, struct flt_task_group *group,
         flt_local_get(pflt, group->ctxs, struct flt_task_group_ctx);
     task->group = group;
     cork_dllist_add_to_head(&ctx->tasks, &task->item);
+    ctx->execution_count += (task->max - task->min);
     if (ctx->task_count++ == 0) {
         /* This is the first pending task that we've added to this per-context
          * object.  That means that the context has just become "active" for
@@ -252,6 +255,7 @@ flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
     flt->public.count = count;
     flt->fleet = fleet;
     flt->public.new_task = flt_create_task;
+    flt->execution_count = 0;
     cork_dllist_init(&flt->ready);
     cork_dllist_init(&flt->unused);
     cork_dllist_init(&flt->batches);
@@ -326,6 +330,7 @@ flt_run(struct flt *pflt, struct flt_task *task)
      * in this context).  So we never need to bump the groups active_ctx_count
      * field. */
     ctx->task_count++;
+    flt->execution_count += (task->max - task->min);
 }
 
 void
@@ -348,6 +353,7 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
      * in this context).  So we never need to bump the groups active_ctx_count
      * field. */
     ctx->task_count++;
+    flt->execution_count += (task->max - task->min);
 }
 
 
@@ -357,32 +363,34 @@ static size_t
 flt_pop_and_run_one(struct flt_priv *flt, size_t max_count)
 {
     struct flt_task  *task = flt_current_task(flt);
-    size_t  max = task->min + max_count;
+    size_t  min = task->min;
+    size_t  count = task->max - task->min;
 
-    if (max < task->max) {
+    if (max_count < count) {
         /* There are more iterations in this bulk task than we can execute
          * during this lock acquisition.  So only execute the first max_count
          * iterations. */
         size_t  i;
-        for (i = task->min; i < max; i++) {
+        size_t  max = min + max_count;
+        for (i = min; i < max; i++) {
             flt_task_run(&flt->public, task, i);
         }
         task->min = max;
+        flt->execution_count -= max_count;
         return max_count;
     } else {
         /* We can execute all of the iterations in this bulk task without
          * exceeding our allotment for this lock acquisition.  So execute them
          * all and retire the task. */
         size_t  i;
-        size_t  count;
-        max = task->max;
-        for (i = task->min; i < max; i++) {
+        size_t  max = task->max;
+        for (i = min; i < max; i++) {
             flt_task_run(&flt->public, task, i);
         }
-        count = max - task->min;
         cork_dllist_remove(&task->item);
         flt_task_group_decrement(flt, task->group);
         flt_task_free(flt, task);
+        flt->execution_count -= count;
         return count;
     }
 }

@@ -71,6 +71,10 @@ struct flt_task_group_ctx {
     /* The number of pending or ready tasks in this group assigned to this
      * execution context. */
     size_t  task_count;
+    /* The number of executions in any pending or ready tasks in this group
+     * assigned to this execution context.  (This includes all of the executions
+     * in each bulkt ask, whereas task_count only counts a bulk task once.) */
+    size_t  execution_count;
 };
 
 #define FLT_TASK_GROUP_STOPPED  0
@@ -107,6 +111,7 @@ struct flt_priv {
     struct cork_dllist  unused;
     struct cork_dllist  batches;
     struct cork_dllist  groups;
+    size_t  execution_count;
 };
 
 CORK_LOCAL
