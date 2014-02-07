@@ -19,24 +19,49 @@
 #include "examples.h"
 
 
+struct timing {
+    uint64_t  wall;
+    uint64_t  cpu;
+};
+
 /* In microseconds */
-static uint64_t
-get_time(void)
+static void
+get_time(struct timing *timing)
 {
-    uint64_t  result;
     struct rusage  rusage;
+    struct timeval  tv;
     getrusage(RUSAGE_SELF, &rusage);
-    result = rusage.ru_utime.tv_usec + 1000000 * rusage.ru_utime.tv_sec;
-    result += rusage.ru_stime.tv_usec + 1000000 * rusage.ru_stime.tv_sec;
-    return result;
+    timing->cpu = rusage.ru_utime.tv_usec + 1000000 * rusage.ru_utime.tv_sec;
+    timing->cpu += rusage.ru_stime.tv_usec + 1000000 * rusage.ru_stime.tv_sec;
+    gettimeofday(&tv, NULL);
+    timing->wall = tv.tv_usec + 1000000 * tv.tv_sec;
 }
 
 static void
-output_timing(FILE *out, const char *config, uint64_t usec)
+diff_time(struct timing *start, struct timing *end)
+{
+    end->cpu -= start->cpu;
+    end->wall -= start->wall;
+}
+
+static void
+output_usec(FILE *out, uint64_t usec)
 {
     uint64_t  sec = usec / 1000000;
     usec = usec % 1000000;
-    fprintf(out, "\t%s\t%" PRIu64 ".%06" PRIu64 "\n", config, sec, usec);
+    fprintf(out, "%" PRIu64 ".%06" PRIu64, sec, usec);
+}
+
+static void
+output_timing(FILE *out, const char *config, struct timing *timing)
+{
+    double  speedup;
+    fprintf(out, "\t%s\t", config);
+    output_usec(out, timing->cpu);
+    fprintf(out, "\t");
+    output_usec(out, timing->wall);
+    speedup = ((double) timing->cpu) / ((double) timing->wall);
+    fprintf(out, "\t%.2lf\n", speedup);
 }
 
 static void
@@ -49,15 +74,16 @@ output_error(FILE *out, const char *config)
 #define run(config, run) \
     do { \
         int  rc; \
-        uint64_t  start; \
-        uint64_t  end; \
-        start = get_time(); \
+        struct timing  start; \
+        struct timing  end; \
+        get_time(&start); \
         run; \
-        end = get_time(); \
-        example->print_name(out); \
+        get_time(&end); \
         rc = example->verify(); \
+        example->print_name(out); \
         if (rc == 0) { \
-            output_timing(out, config, end - start); \
+            diff_time(&start, &end); \
+            output_timing(out, config, &end); \
         } else { \
             output_error(out, config); \
         } \
