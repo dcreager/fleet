@@ -7,24 +7,41 @@
  * ----------------------------------------------------------------------
  */
 
-#include <inttypes.h>
-#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "fleet.h"
 #include "examples.h"
 
 
-static uint64_t  min;
-static uint64_t  max;
-static uint64_t  batch_size;
-static uint64_t  result;
+static unsigned long  min;
+static unsigned long  max;
+static unsigned long  batch_size;
+static unsigned long  result;
+
+static void
+configure(int argc, char **argv)
+{
+    if (argc != 2) {
+        fprintf(stderr, "Usage: concurrent_batched [batch size] [count]\n");
+        exit(EXIT_FAILURE);
+    }
+    min = 0;
+    max = flt_parse_ulong(argv[1]);
+    batch_size = flt_parse_ulong(argv[0]);
+}
+
+static void
+print_name(FILE *out)
+{
+    fprintf(out, "concurrent_batched:%lu:%lu", batch_size, max);
+}
 
 static void
 run_native(void)
 {
-    uint64_t  sum = 0;
-    uint64_t  i;
+    unsigned long  sum = 0;
+    unsigned long  i;
     for (i = min; i < max; i++) {
         sum += i;
     }
@@ -40,7 +57,7 @@ static void
 add_one(struct flt *flt, void *ud, size_t i)
 {
     struct flt_local  *local = ud;
-    uint64_t  *result = flt_local_get(flt, local, uint64_t);
+    unsigned long  *result = flt_local_get(flt, local, unsigned long);
     *result += i;
 }
 
@@ -49,7 +66,7 @@ schedule_batch(struct flt *flt, void *ud, size_t i)
 {
     struct flt_task  *task;
     struct flt_local  *local = ud;
-    uint64_t  j = i + batch_size;
+    unsigned long  j = i + batch_size;
 
     if (j > max) {
         j = max;
@@ -63,7 +80,7 @@ schedule_batch(struct flt *flt, void *ud, size_t i)
 }
 
 static void
-merge_one_batch(struct flt *flt, uint64_t *batch_count, int dummy)
+merge_one_batch(struct flt *flt, unsigned long *batch_count, int dummy)
 {
     result += *batch_count;
 }
@@ -72,17 +89,17 @@ static void
 merge_batches(struct flt *flt, void *ud, size_t i)
 {
     struct flt_local  *local = ud;
-    flt_local_visit(flt, local, uint64_t, merge_one_batch, 0);
+    flt_local_visit(flt, local, unsigned long, merge_one_batch, 0);
     flt_local_free(flt, local);
 }
 
 static void
-uint64_init(struct flt *flt, void *ud, void *vinstance)
+ulong_init(struct flt *flt, void *ud, void *vinstance)
 {
 }
 
 static void
-uint64_done(struct flt *flt, void *ud, void *vinstance)
+ulong_done(struct flt *flt, void *ud, void *vinstance)
 {
 }
 
@@ -92,7 +109,7 @@ schedule(struct flt *flt, void *ud, size_t min)
     struct flt_local  *local;
     struct flt_task_group  *group;
     struct flt_task  *task;
-    local = flt_local_new(flt, uint64_t, NULL, uint64_init, uint64_done);
+    local = flt_local_new(flt, unsigned long, NULL, ulong_init, ulong_done);
     group = flt_task_group_new(flt);
     flt_task_group_run_after_current(flt, group);
     task = flt_task_new(flt, merge_batches, local, 0);
@@ -110,23 +127,15 @@ run_in_fleet(struct flt_fleet *fleet)
 static int
 verify(void)
 {
-    uint64_t  expected = max * (max - 1) / 2;
-    flt_check_result(concurrent_batched, "%" PRIu64, result, expected);
+    unsigned long  expected = max * (max - 1) / 2;
+    flt_check_result(concurrent_batched, "%lu", result, expected);
     return 0;
 }
 
-static struct flt_example  example = {
+struct flt_example  concurrent_batched = {
+    configure,
+    print_name,
     run_native,
     run_in_fleet,
     verify
 };
-
-struct flt_example *
-concurrent_batched(uint64_t batch_size_, uint64_t max_)
-{
-    result = 0;
-    min = 0;
-    max = max_;
-    batch_size = batch_size_;
-    return &example;
-}

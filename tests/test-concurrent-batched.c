@@ -21,7 +21,7 @@
 #include "fleet-test.c"
 
 
-test_fleet_computation(concurrent_batched(16, 100000));
+test_fleet_computation(concurrent_batched, "16", "500");
 
 
 /*-----------------------------------------------------------------------
