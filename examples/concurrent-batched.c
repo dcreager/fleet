@@ -127,7 +127,7 @@ run_in_fleet(struct flt_fleet *fleet)
 static int
 verify(void)
 {
-    unsigned long  expected = max * (max - 1) / 2;
+    unsigned long  expected = max / 2 * (max - 1);
     flt_check_result(concurrent_batched, "%lu", result, expected);
     return 0;
 }
