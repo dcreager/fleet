@@ -21,7 +21,7 @@
 #include "fleet-test.c"
 
 
-test_fleet_computation(sequential_return(100000));
+test_fleet_computation(sequential_return, "500");
 
 
 /*-----------------------------------------------------------------------

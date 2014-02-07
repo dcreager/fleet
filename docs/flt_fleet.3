@@ -24,6 +24,17 @@ void
 .PD 0
 .P
 .PD
+\f[B]flt_fleet_set_context_count\f[](struct flt_fleet *\f[I]fleet\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int
+\f[I]count\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
 \f[B]flt_fleet_run\f[](struct flt_fleet *\f[I]fleet\f[], flt_task
 *\f[I]task\f[],
 .PD 0
@@ -50,6 +61,16 @@ This task can create other tasks, as needed.
 the child tasks that it creates, have finished.
 As with all tasks, you can use the \f[I]ud\f[] and \f[I]i\f[] parameters
 to pass data into the task.
+.PP
+The fleet will create several execution contexts, which can run in
+parallel, to help execute your tasks more quickly.
+By default, the fleet will create one context for each processor core on
+the current machine.
+You can use \f[B]flt_fleet_set_context_count\f[]() to tell the fleet to
+create fewer contexts (for instance, if you need to play nice with other
+applications that need to use the processor).
+The new context count will apply to any subsequent
+\f[B]flt_fleet_run\f[]() calls.
 .PP
 You should not try to access the \f[B]flt_fleet\f[] instance from within
 any of the tasks that it runs.

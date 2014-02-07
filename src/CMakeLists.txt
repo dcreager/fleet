@@ -6,17 +6,48 @@
 # Please see the COPYING file in this distribution for license details.
 # ----------------------------------------------------------------------
 
+set(LIBCORK_DIR ${CMAKE_SOURCE_DIR}/lib/libcork)
+include_directories(${LIBCORK_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 #-----------------------------------------------------------------------
 # Build the library
 
+# Keep this list up-to-date with lib/libcork/src/CMakeLists.txt, and uncomment
+# lines only as needed to satisfy linker errors.  That way we only build the
+# parts of libcork that we actually use.
+set(LIBCORK_SRC
+    #${LIBCORK_DIR}/src/libcork/cli/commands.c
+    ${LIBCORK_DIR}/src/libcork/core/allocator.c
+    ${LIBCORK_DIR}/src/libcork/core/error.c
+    #${LIBCORK_DIR}/src/libcork/core/gc.c
+    #${LIBCORK_DIR}/src/libcork/core/hash.c
+    #${LIBCORK_DIR}/src/libcork/core/ip-address.c
+    #${LIBCORK_DIR}/src/libcork/core/mempool.c
+    #${LIBCORK_DIR}/src/libcork/core/timestamp.c
+    #${LIBCORK_DIR}/src/libcork/core/u128.c
+    #${LIBCORK_DIR}/src/libcork/ds/array.c
+    #${LIBCORK_DIR}/src/libcork/ds/bitset.c
+    ${LIBCORK_DIR}/src/libcork/ds/buffer.c
+    ${LIBCORK_DIR}/src/libcork/ds/dllist.c
+    #${LIBCORK_DIR}/src/libcork/ds/file-stream.c
+    #${LIBCORK_DIR}/src/libcork/ds/hash-table.c
+    ${LIBCORK_DIR}/src/libcork/ds/managed-buffer.c
+    #${LIBCORK_DIR}/src/libcork/ds/ring-buffer.c
+    ${LIBCORK_DIR}/src/libcork/ds/slice.c
+    #${LIBCORK_DIR}/src/libcork/posix/directory-walker.c
+    #${LIBCORK_DIR}/src/libcork/posix/env.c
+    #${LIBCORK_DIR}/src/libcork/posix/exec.c
+    #${LIBCORK_DIR}/src/libcork/posix/files.c
+    ${LIBCORK_DIR}/src/libcork/posix/process.c
+    #${LIBCORK_DIR}/src/libcork/posix/subprocess.c
+    ${LIBCORK_DIR}/src/libcork/pthreads/thread.c
+)
+
 set(LIBFLEET_SRC
-    libfleet/dllist.c
     libfleet/fleet.c
     libfleet/local.c
-    libfleet/single-threaded.c
 )
 
 # Update the VERSION and SOVERSION properties below according to the following
@@ -45,12 +76,14 @@ set(LIBFLEET_SRC
 #
 # [1] http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html#Updating-version-info
 
-add_library(libfleet SHARED ${LIBFLEET_SRC})
+add_library(libfleet SHARED ${LIBCORK_SRC} ${LIBFLEET_SRC})
 set_target_properties(libfleet PROPERTIES
     OUTPUT_NAME fleet
+    COMPILE_DEFINITIONS CORK_API=CORK_LOCAL
     VERSION 0.0.0
     SOVERSION 0)
 target_link_libraries(libfleet
+    ${CMAKE_THREAD_LIBS_INIT}
 )
 
 install(TARGETS libfleet DESTINATION ${CMAKE_INSTALL_LIBDIR})

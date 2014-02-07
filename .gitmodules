@@ -1,0 +1,4 @@
+[submodule "lib/libcork"]
+	path = lib/libcork
+	url = git://github.com/redjack/libcork.git
+	branch = develop

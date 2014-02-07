@@ -17,6 +17,10 @@ flt_fleet -- Fleets of tasks
 | **flt_fleet_free**(struct flt_fleet \**fleet*);
 |
 | void
+| **flt_fleet_set_context_count**(struct flt_fleet \**fleet*,
+|                             unsigned int *count*);
+|
+| void
 | **flt_fleet_run**(struct flt_fleet \**fleet*, flt_task \**task*,
 |               void \**ud*, size_t *i*);
 
@@ -36,6 +40,14 @@ fleet.
 other tasks, as needed.  **flt_fleet_run**() will not return until the root
 task, and all of the child tasks that it creates, have finished.  As with all
 tasks, you can use the *ud* and *i* parameters to pass data into the task.
+
+The fleet will create several execution contexts, which can run in parallel, to
+help execute your tasks more quickly.  By default, the fleet will create one
+context for each processor core on the current machine.  You can use
+**flt_fleet_set_context_count**() to tell the fleet to create fewer contexts
+(for instance, if you need to play nice with other applications that need to use
+the processor).  The new context count will apply to any subsequent
+**flt_fleet_run**() calls.
 
 You should not try to access the **flt_fleet** instance from within any of the
 tasks that it runs.  In particular, you should not try to free the fleet from

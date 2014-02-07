@@ -7,22 +7,39 @@
  * ----------------------------------------------------------------------
  */
 
-#include <inttypes.h>
-#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "fleet.h"
 #include "examples.h"
 
 
-static uint64_t  min;
-static uint64_t  max;
-static uint64_t  result;
+static unsigned long  min;
+static unsigned long  max;
+static unsigned long  result;
+
+static void
+configure(int argc, char **argv)
+{
+    if (argc != 1) {
+        fprintf(stderr, "Usage: sequential_return [count]\n");
+        exit(EXIT_FAILURE);
+    }
+    min = 0;
+    max = flt_parse_ulong(argv[0]);
+}
+
+static void
+print_name(FILE *out)
+{
+    fprintf(out, "sequential_return:%lu", max);
+}
 
 static void
 run_native(void)
 {
-    uint64_t  sum = 0;
-    uint64_t  i;
+    unsigned long  sum = 0;
+    unsigned long  i;
     for (i = min; i < max; i++) {
         sum += i;
     }
@@ -35,7 +52,7 @@ static void
 add_one(struct flt *flt, void *ud, size_t i)
 {
     if (i < max) {
-        uint64_t  *result = ud;
+        unsigned long  *result = ud;
         *result += i;
         return flt_return_to(flt, add_one, result, i+1);
     }
@@ -51,22 +68,15 @@ run_in_fleet(struct flt_fleet *fleet)
 static int
 verify(void)
 {
-    uint64_t  expected = max * (max - 1) / 2;
-    flt_check_result(sequential_return, "%" PRIu64, result, expected);
+    unsigned long  expected = max * (max - 1) / 2;
+    flt_check_result(sequential_return, "%lu", result, expected);
     return 0;
 }
 
-static struct flt_example  example = {
+struct flt_example  sequential_return = {
+    configure,
+    print_name,
     run_native,
     run_in_fleet,
     verify
 };
-
-struct flt_example *
-sequential_return(uint64_t max_)
-{
-    result = 0;
-    min = 0;
-    max = max_;
-    return &example;
-}
