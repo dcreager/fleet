@@ -132,7 +132,9 @@ flt_local_free(struct flt *flt, struct flt_local *local);
 
 #define flt_local_foreach(flt, local, i, type, inst) \
     for ((i) = 0, (inst) = (local)->instances; (i) < (flt)->count; \
-         (i)++, (inst)++)
+         (i)++, \
+         (inst) = ((type *) (((char *) (inst)) + \
+             flt_round_to_cache_line(sizeof(type)))))
 
 #define flt_local_visit(flt, local, type, visit, ...) \
     do { \
