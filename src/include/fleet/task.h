@@ -12,8 +12,10 @@
 
 #include "libcork/core.h"
 #include "libcork/ds.h"
+#include "libcork/threads.h"
 
 #include "fleet/threads.h"
+#include "fleet/timing.h"
 
 
 struct flt_priv;
@@ -34,16 +36,13 @@ struct flt_priv;
 
 struct flt_task {
     struct cork_dllist_item  item;
+    const char  *name;
     struct flt_task_group  *group;
     flt_task  *func;
     void  *ud;
     size_t  min;
     size_t  max;
 };
-
-CORK_LOCAL
-void
-flt_task_free(struct flt_priv *flt, struct flt_task *task);
 
 #define flt_task_run(f, t, i)  ((t)->func((f), (t)->ud, (i)))
 
@@ -71,9 +70,8 @@ struct flt_task_group_ctx {
     /* The number of pending or ready tasks in this group assigned to this
      * execution context. */
     size_t  task_count;
-    /* The number of executions in any pending or ready tasks in this group
-     * assigned to this execution context.  (This includes all of the executions
-     * in each bulkt ask, whereas task_count only counts a bulk task once.) */
+    /* The number of individual executions (including bulk tasks) in this group
+     * assigned to this execution context. */
     size_t  execution_count;
 };
 
@@ -87,16 +85,6 @@ struct flt_task_group {
     struct flt_task_group  *next_after;
     unsigned int  state;
 };
-
-CORK_LOCAL
-void
-flt_task_group_free(struct flt_priv *flt, struct flt_task_group *group);
-
-/* Once an execution context finishes executing a task, it should use this
- * function to decrement its group's `task_count` field. */
-CORK_LOCAL
-void
-flt_task_group_decrement(struct flt_priv *flt, struct flt_task_group *group);
 
 
 /*-----------------------------------------------------------------------
@@ -112,16 +100,32 @@ struct flt_priv {
     struct cork_dllist  batches;
     struct cork_dllist  groups;
     size_t  execution_count;
+    struct cork_thread  *thread;
+    struct cork_thread_body  body;
+    unsigned int  next_to_steal_from;
+    struct flt_priv * volatile  waiting_to_steal;
+    bool  active;
+
+#if FLT_MEASURE_TIMING
+    struct flt_stopwatch  stopwatch;
+    struct {
+        uint64_t  choosing_to_steal;
+        uint64_t  executing;
+        uint64_t  stealing;
+        uint64_t  waiting_to_execute;
+        uint64_t  waiting_to_steal;
+        uint64_t  waiting_to_be_stolen_from;
+    } timing;
+#endif
 };
 
 CORK_LOCAL
-void
-flt_init(struct flt_priv *flt, struct flt_fleet *fleet,
-         size_t index, size_t count);
+struct flt_priv *
+flt_new(struct flt_fleet *fleet, size_t index, size_t count);
 
 CORK_LOCAL
 void
-flt_done(struct flt_priv *flt);
+flt_free(struct flt_priv *flt);
 
 CORK_LOCAL
 struct flt_task *
@@ -137,9 +141,10 @@ flt_current_group(struct flt_priv *flt);
  */
 
 struct flt_fleet {
-    struct flt_priv  *contexts;
+    struct flt_priv  **contexts;
     unsigned int  count;
     struct flt_counter  active_count;
+    struct cork_buffer  buf;
 };
 
 

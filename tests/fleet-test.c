@@ -32,6 +32,39 @@ START_TEST(test_single_threaded) \
     DESCRIBE_TEST; \
     example.configure(argc, argv); \
     fleet = flt_fleet_new(); \
+    flt_fleet_set_context_count(fleet, 1); \
+    example.run_in_fleet(fleet); \
+    flt_fleet_free(fleet); \
+    fail_if(example.verify() != 0); \
+} \
+END_TEST \
+\
+START_TEST(test_2_threads) \
+{ \
+    extern struct flt_example  example; \
+    static char  *argv[] = { __VA_ARGS__ }; \
+    static int  argc = sizeof(argv) / sizeof(argv[0]); \
+    struct flt_fleet  *fleet; \
+    DESCRIBE_TEST; \
+    example.configure(argc, argv); \
+    fleet = flt_fleet_new(); \
+    flt_fleet_set_context_count(fleet, 2); \
+    example.run_in_fleet(fleet); \
+    flt_fleet_free(fleet); \
+    fail_if(example.verify() != 0); \
+} \
+END_TEST \
+\
+START_TEST(test_4_threads) \
+{ \
+    extern struct flt_example  example; \
+    static char  *argv[] = { __VA_ARGS__ }; \
+    static int  argc = sizeof(argv) / sizeof(argv[0]); \
+    struct flt_fleet  *fleet; \
+    DESCRIBE_TEST; \
+    example.configure(argc, argv); \
+    fleet = flt_fleet_new(); \
+    flt_fleet_set_context_count(fleet, 4); \
     example.run_in_fleet(fleet); \
     flt_fleet_free(fleet); \
     fail_if(example.verify() != 0); \
@@ -45,6 +78,8 @@ test_suite() \
     TCase  *tc_fleet = tcase_create("fleet"); \
     tcase_add_test(tc_fleet, test_native); \
     tcase_add_test(tc_fleet, test_single_threaded); \
+    tcase_add_test(tc_fleet, test_2_threads); \
+    tcase_add_test(tc_fleet, test_4_threads); \
     suite_add_tcase(s, tc_fleet); \
     return s; \
 }

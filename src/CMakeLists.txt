@@ -20,7 +20,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(LIBCORK_SRC
     #${LIBCORK_DIR}/src/libcork/cli/commands.c
     ${LIBCORK_DIR}/src/libcork/core/allocator.c
-    #${LIBCORK_DIR}/src/libcork/core/error.c
+    ${LIBCORK_DIR}/src/libcork/core/error.c
     #${LIBCORK_DIR}/src/libcork/core/gc.c
     #${LIBCORK_DIR}/src/libcork/core/hash.c
     #${LIBCORK_DIR}/src/libcork/core/ip-address.c
@@ -29,20 +29,20 @@ set(LIBCORK_SRC
     #${LIBCORK_DIR}/src/libcork/core/u128.c
     #${LIBCORK_DIR}/src/libcork/ds/array.c
     #${LIBCORK_DIR}/src/libcork/ds/bitset.c
-    #${LIBCORK_DIR}/src/libcork/ds/buffer.c
+    ${LIBCORK_DIR}/src/libcork/ds/buffer.c
     ${LIBCORK_DIR}/src/libcork/ds/dllist.c
     #${LIBCORK_DIR}/src/libcork/ds/file-stream.c
     #${LIBCORK_DIR}/src/libcork/ds/hash-table.c
-    #${LIBCORK_DIR}/src/libcork/ds/managed-buffer.c
+    ${LIBCORK_DIR}/src/libcork/ds/managed-buffer.c
     #${LIBCORK_DIR}/src/libcork/ds/ring-buffer.c
-    #${LIBCORK_DIR}/src/libcork/ds/slice.c
+    ${LIBCORK_DIR}/src/libcork/ds/slice.c
     #${LIBCORK_DIR}/src/libcork/posix/directory-walker.c
     #${LIBCORK_DIR}/src/libcork/posix/env.c
     #${LIBCORK_DIR}/src/libcork/posix/exec.c
     #${LIBCORK_DIR}/src/libcork/posix/files.c
-    #${LIBCORK_DIR}/src/libcork/posix/process.c
+    ${LIBCORK_DIR}/src/libcork/posix/process.c
     #${LIBCORK_DIR}/src/libcork/posix/subprocess.c
-    #${LIBCORK_DIR}/src/libcork/pthreads/thread.c
+    ${LIBCORK_DIR}/src/libcork/pthreads/thread.c
 )
 
 set(LIBFLEET_SRC

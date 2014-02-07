@@ -99,7 +99,26 @@ static void
 run_single(FILE *out, struct flt_example *example)
 {
     struct flt_fleet  *fleet = flt_fleet_new();
+    flt_fleet_set_context_count(fleet, 1);
     run("single", example->run_in_fleet(fleet));
+    flt_fleet_free(fleet);
+}
+
+static void
+run_2core(FILE *out, struct flt_example *example)
+{
+    struct flt_fleet  *fleet = flt_fleet_new();
+    flt_fleet_set_context_count(fleet, 2);
+    run("2core", example->run_in_fleet(fleet));
+    flt_fleet_free(fleet);
+}
+
+static void
+run_4core(FILE *out, struct flt_example *example)
+{
+    struct flt_fleet  *fleet = flt_fleet_new();
+    flt_fleet_set_context_count(fleet, 4);
+    run("4core", example->run_in_fleet(fleet));
     flt_fleet_free(fleet);
 }
 
@@ -109,6 +128,8 @@ flt_run_example(FILE *out, struct flt_example *example)
 {
     run_native(out, example);
     run_single(out, example);
+    run_2core(out, example);
+    run_4core(out, example);
 }
 
 
@@ -126,6 +147,8 @@ flt_run_example_config(FILE *out, const char *config,
 {
     try_config(native);
     try_config(single);
+    try_config(2core);
+    try_config(4core);
     fprintf(stderr, "Unknown config %s\n", config);
     exit(EXIT_FAILURE);
 }
