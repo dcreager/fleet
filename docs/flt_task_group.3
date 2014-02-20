@@ -79,7 +79,7 @@ to worry about thread synchronization yourself.
 The task group is initially empty.
 .PP
 \f[B]flt_task_group_add\f[]() adds a task (created via
-\f[B]flt_task_new\f[](3) or \f[B]flt_bulk_task_new\f[](3)) to a group.
+\f[B]flt_task_new\f[](3)) to a group.
 The group must be stopped; it is your responsibility to not call this
 function if you've already started the task group.
 .PP

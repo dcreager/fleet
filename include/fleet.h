@@ -35,14 +35,11 @@ struct flt {
     unsigned int  count;
 
     struct flt_task *
-    (*new_task)(struct flt *, const char *, flt_task *, void *, size_t, size_t);
+    (*new_task)(struct flt *, flt_task *, void *, size_t);
 };
 
 #define flt_task_new(flt, func, ud, i) \
-    ((flt)->new_task((flt), #func, (func), (ud), (i), (i)+1))
-
-#define flt_bulk_task_new(flt, func, ud, min, max) \
-    ((flt)->new_task((flt), #func, (func), (ud), (min), (max)))
+    ((flt)->new_task((flt), (func), (ud), (i)))
 
 
 void
@@ -98,11 +95,7 @@ flt_fleet_set_context_count(struct flt_fleet *fleet,
                             unsigned int context_count);
 
 void
-flt_fleet_run_(struct flt_fleet *fleet, const char *name,
-               flt_task *func, void *ud, size_t i);
-
-#define flt_fleet_run(fleet, func, ud, i) \
-    flt_fleet_run_(fleet, #func, func, ud, i)
+flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t i);
 
 
 /*-----------------------------------------------------------------------
