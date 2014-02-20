@@ -213,6 +213,53 @@ flt_after_ctx_add_step(struct flt *flt, struct flt_after_ctx *after_ctx);
 
 
 /*-----------------------------------------------------------------------
+ * Bounded queues
+ */
+
+struct flt_bqueue;
+struct flt_bqueue_ctx;
+
+typedef void
+flt_bqueue_init_f(struct flt *flt, void *ud, void *instance);
+
+typedef void
+flt_bqueue_done_f(struct flt *flt, void *ud, void *instance);
+
+struct flt_bqueue *
+flt_bqueue_new(struct flt *flt, size_t instance_size, void *ud,
+               flt_bqueue_init_f *init, flt_bqueue_done_f *done);
+
+void
+flt_bqueue_free(struct flt *flt, struct flt_bqueue *queue);
+
+void
+flt_bqueue_set_batch_count(struct flt *flt, struct flt_bqueue *queue,
+                           size_t count);
+
+
+void *
+flt_bqueue_ctx_try_get(struct flt *flt, struct flt_bqueue_ctx *queue);
+
+void
+flt_bqueue_ctx_release(struct flt *flt, struct flt_bqueue_ctx *queue,
+                       void *instance);
+
+struct flt_bqueue_ctx_result {
+    void  *instance;
+    void  *ud;
+};
+
+void *
+flt_bqueue_ctx_get(struct flt *flt, struct flt_bqueue_ctx *queue_ctx,
+                   flt_task_f *func, void *ud, size_t i);
+
+void *
+flt_bqueue_ctx_get_migratable(struct flt *flt, struct flt_bqueue_ctx *queue_ctx,
+                              flt_task_f *func, void *ud, size_t i,
+                              flt_migrate_f *migrate);
+
+
+/*-----------------------------------------------------------------------
  * Semaphore counters
  */
 
@@ -238,6 +285,23 @@ flt_scounter_ctx_dec(struct flt *flt, struct flt_scounter_ctx *counter_ctx);
 struct flt_scounter_ctx *
 flt_scounter_ctx_migrate(struct flt *from, struct flt *to,
                          struct flt_scounter_ctx *counter_ctx);
+
+
+/*-----------------------------------------------------------------------
+ * Sequencers
+ */
+
+struct flt_sequencer;
+
+struct flt_sequencer *
+flt_sequencer_new(struct flt *flt);
+
+void
+flt_sequencer_free(struct flt *flt, struct flt_sequencer *seq);
+
+void
+flt_sequencer_run(struct flt *flt, struct flt_sequencer *seq,
+                  flt_task *func, void *ud, size_t i, struct flt_after *after);
 
 
 #endif /* FLEET_H */
