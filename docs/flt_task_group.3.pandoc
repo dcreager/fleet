@@ -49,10 +49,9 @@ thread synchronization yourself.
 **flt_task_group_new**() creates a new task group.  The task group is initially
 empty.
 
-**flt_task_group_add**() adds a task (created via **flt_task_new**(3)
-or **flt_bulk_task_new**(3)) to a group.  The group must be stopped; it is your
-responsibility to not call this function if you've already started the task
-group.
+**flt_task_group_add**() adds a task (created via **flt_task_new**(3)) to a
+group.  The group must be stopped; it is your responsibility to not call this
+function if you've already started the task group.
 
 **flt_task_group_start**() starts a task group.  All of the tasks that are in
 the group become eligible for execution.  You must ensure that you call this

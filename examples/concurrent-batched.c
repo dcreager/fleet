@@ -50,33 +50,26 @@ run_native(void)
 
 static flt_task  add_one;
 static flt_task  merge_batches;
-static flt_task  schedule_batch;
 static flt_task  schedule;
 
 static void
-add_one(struct flt *flt, void *ud, size_t i)
+add_one(struct flt *flt, void *ud, size_t index)
 {
     struct flt_local  *local = ud;
     unsigned long  *result = flt_local_get(flt, local, unsigned long);
-    *result += i;
-}
-
-static void
-schedule_batch(struct flt *flt, void *ud, size_t i)
-{
-    struct flt_task  *task;
-    struct flt_local  *local = ud;
+    unsigned long  i = index;
     unsigned long  j = i + batch_size;
 
     if (j > max) {
         j = max;
     } else {
-        task = flt_task_new(flt, schedule_batch, local, j);
+        struct flt_task  *task = flt_task_new(flt, add_one, local, j);
         flt_run_later(flt, task);
     }
 
-    task = flt_bulk_task_new(flt, add_one, local, i, j);
-    flt_run(flt, task);
+    for (; i < j; i++) {
+        *result += i;
+    }
 }
 
 static void
@@ -114,7 +107,7 @@ schedule(struct flt *flt, void *ud, size_t min)
     flt_task_group_run_after_current(flt, group);
     task = flt_task_new(flt, merge_batches, local, 0);
     flt_task_group_add(flt, group, task);
-    return flt_return_to(flt, schedule_batch, local, min);
+    return flt_return_to(flt, add_one, local, min);
 }
 
 static void

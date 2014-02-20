@@ -40,11 +40,10 @@ struct flt_task {
     struct flt_task_group  *group;
     flt_task  *func;
     void  *ud;
-    size_t  min;
-    size_t  max;
+    size_t  i;
 };
 
-#define flt_task_run(f, t, i)  ((t)->func((f), (t)->ud, (i)))
+#define flt_task_run(f, t)  ((t)->func((f), (t)->ud, (t)->i))
 
 
 /*-----------------------------------------------------------------------
@@ -70,9 +69,6 @@ struct flt_task_group_ctx {
     /* The number of pending or ready tasks in this group assigned to this
      * execution context. */
     size_t  task_count;
-    /* The number of individual executions (including bulk tasks) in this group
-     * assigned to this execution context. */
-    size_t  execution_count;
 };
 
 #define FLT_TASK_GROUP_STOPPED  0
@@ -99,7 +95,7 @@ struct flt_priv {
     struct cork_dllist  unused;
     struct cork_dllist  batches;
     struct cork_dllist  groups;
-    size_t  execution_count;
+    size_t  task_count;
     struct cork_thread  *thread;
     struct cork_thread_body  body;
     unsigned int  next_to_steal_from;

@@ -79,28 +79,23 @@ flt_task_batch_free(struct flt_priv *flt, struct flt_task *batch)
 }
 
 static struct flt_task *
-flt_reuse_task(struct flt *pflt, const char *name, flt_task *func, void *ud,
-               size_t min, size_t max);
+flt_reuse_task(struct flt *pflt, flt_task *func, void *ud, size_t i);
 
 static struct flt_task *
-flt_create_task(struct flt *pflt, const char *name, flt_task *func, void *ud,
-                size_t min, size_t max)
+flt_create_task(struct flt *pflt, flt_task *func, void *ud, size_t i)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task  *task = flt_task_batch_new(flt);
     flt->public.new_task = flt_reuse_task;
-    task->name = name;
     task->func = func;
     task->ud = ud;
-    task->min = min;
-    task->max = max;
+    task->i = i;
     task->group = NULL;
     return task;
 }
 
 static struct flt_task *
-flt_reuse_task(struct flt *pflt, const char *name, flt_task *func, void *ud,
-               size_t min, size_t max)
+flt_reuse_task(struct flt *pflt, flt_task *func, void *ud, size_t i)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct cork_dllist_item  *head = cork_dllist_start(&flt->unused);
@@ -109,11 +104,9 @@ flt_reuse_task(struct flt *pflt, const char *name, flt_task *func, void *ud,
         flt->public.new_task = flt_create_task;
     }
     cork_dllist_remove(head);
-    task->name = name;
     task->func = func;
     task->ud = ud;
-    task->min = min;
-    task->max = max;
+    task->i = i;
     task->group = NULL;
     return task;
 }
@@ -138,7 +131,6 @@ flt_task_group_ctx__init(struct flt *pflt, void *ud, void *vctx)
     ctx->after = NULL;
     cork_dllist_init(&ctx->tasks);
     ctx->task_count = 0;
-    ctx->execution_count = 0;
 }
 
 static void
@@ -201,9 +193,9 @@ flt_task_group_start(struct flt *pflt, struct flt_task_group *group)
      * context's ready queue (regardless of which context they used to belong
      * to). */
     flt_local_foreach(pflt, group->ctxs, i, struct flt_task_group_ctx, ctx) {
-        DEBUG(flt, "Start %zu/%zu tasks from group %p, context %u",
-              ctx->task_count, ctx->execution_count, group, i);
-        flt->execution_count += ctx->execution_count;
+        DEBUG(flt, "Start %zu tasks from group %p, context %u",
+              ctx->task_count, group, i);
+        flt->task_count += ctx->task_count;
         cork_dllist_add_list_to_head(&flt->ready, &ctx->tasks);
     }
     group->state = FLT_TASK_GROUP_STARTED;
@@ -264,12 +256,10 @@ flt_task_group_add(struct flt *pflt, struct flt_task_group *group,
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_group_ctx  *ctx =
         flt_local_get(pflt, group->ctxs, struct flt_task_group_ctx);
-    size_t  count = task->max - task->min;
     task->group = group;
     cork_dllist_add_to_head(&ctx->tasks, &task->item);
-    DEBUG(flt, "Add %s [%zu,%zu) to group %p",
-          task->name, task->min, task->max, group);
-    ctx->execution_count += count;
+    DEBUG(flt, "Add %p(%p,%zu) to group %p",
+          task->func, task->ud, task->i, group);
     flt_task_group_increment(flt, group);
 }
 
@@ -328,7 +318,7 @@ flt_new(struct flt_fleet *fleet, size_t index, size_t count)
     flt->public.count = count;
     flt->fleet = fleet;
     flt->public.new_task = flt_create_task;
-    flt->execution_count = 0;
+    flt->task_count = 0;
     cork_dllist_init(&flt->ready);
     cork_dllist_init(&flt->unused);
     cork_dllist_init(&flt->batches);
@@ -401,8 +391,8 @@ flt_run(struct flt *pflt, struct flt_task *task)
     struct flt_task_group_ctx  *ctx =
         flt_local_get(pflt, current_group->ctxs, struct flt_task_group_ctx);
 
-    DEBUG(flt, "Add %s [%zu,%zu) to current group %p",
-          task->name, task->min, task->max, current_group);
+    DEBUG(flt, "Add %p(%p,%zu) to current group %p",
+          task->func, task->ud, task->i, current_group);
     task->group = current_group;
 
     /* The current task's group must already be running (otherwise how would we
@@ -415,7 +405,7 @@ flt_run(struct flt *pflt, struct flt_task *task)
      * in this context).  So we never need to bump the groups active_ctx_count
      * field. */
     ctx->task_count++;
-    flt->execution_count += (task->max - task->min);
+    flt->task_count++;
 }
 
 void
@@ -426,8 +416,8 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
     struct flt_task_group_ctx  *ctx =
         flt_local_get(pflt, current_group->ctxs, struct flt_task_group_ctx);
 
-    DEBUG(flt, "Add %s [%zu,%zu) to end of current group %p",
-          task->name, task->min, task->max, current_group);
+    DEBUG(flt, "Add %p(%p,%zu) to end of current group %p",
+          task->func, task->ud, task->i, current_group);
     task->group = current_group;
 
     /* The current task's group must already be running (otherwise how would we
@@ -440,7 +430,7 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
      * in this context).  So we never need to bump the groups active_ctx_count
      * field. */
     ctx->task_count++;
-    flt->execution_count += (task->max - task->min);
+    flt->task_count++;
 }
 
 
@@ -455,43 +445,16 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
 
 #define FLT_ROUND_SIZE  256
 
-/* Returns the number of task iterations that were executed. */
-static size_t
-flt_pop_and_run_one(struct flt_priv *flt, size_t max_count)
+static void
+flt_pop_and_run_one(struct flt_priv *flt)
 {
     struct flt_task  *task = flt_current_task(flt);
-    size_t  min = task->min;
-    size_t  count = task->max - task->min;
-
-    if (max_count < count) {
-        /* There are more iterations in this bulk task than we can execute
-         * during this lock acquisition.  So only execute the first max_count
-         * iterations. */
-        size_t  i;
-        size_t  max = min + max_count;
-        DEBUG(flt, "Run task %s [%zu,%zu)", task->name, min, max);
-        for (i = min; i < max; i++) {
-            flt_task_run(&flt->public, task, i);
-        }
-        task->min = max;
-        flt->execution_count -= max_count;
-        return max_count;
-    } else {
-        /* We can execute all of the iterations in this bulk task without
-         * exceeding our allotment for this lock acquisition.  So execute them
-         * all and retire the task. */
-        size_t  i;
-        size_t  max = task->max;
-        DEBUG(flt, "Run task %s [%zu,%zu)", task->name, min, max);
-        for (i = min; i < max; i++) {
-            flt_task_run(&flt->public, task, i);
-        }
-        cork_dllist_remove(&task->item);
-        flt_task_group_decrement(flt, task->group);
-        flt_task_free(flt, task);
-        flt->execution_count -= count;
-        return count;
-    }
+    DEBUG(flt, "Run task %p(%p,%zu)", task->func, task->ud, task->i);
+    flt_task_run(&flt->public, task);
+    cork_dllist_remove(&task->item);
+    flt_task_group_decrement(flt, task->group);
+    flt_task_free(flt, task);
+    flt->task_count--;
 }
 
 static unsigned int
@@ -518,7 +481,7 @@ flt_steal(struct flt_priv *flt)
     struct cork_dllist_item  *prev;
 
     /* Is there anything to steal?  If not, give up. */
-    if (steal_from->execution_count == 0) {
+    if (steal_from->task_count == 0) {
         DEBUG(flt, "Not going to steal from empty context %u", steal_index);
         return 0;
     }
@@ -537,7 +500,7 @@ flt_steal(struct flt_priv *flt)
     flt_measure_time(flt, waiting_to_steal);
 
     /* And then steal! */
-    to_steal = steal_from->execution_count / 2;
+    to_steal = steal_from->task_count / 2;
     left_to_steal = to_steal;
     DEBUG(flt, "Steal %zu tasks from context %u", to_steal, steal_index);
 
@@ -547,43 +510,21 @@ flt_steal(struct flt_priv *flt)
     for (curr = cork_dllist_end(&steal_from->ready), prev = curr->prev;
          left_to_steal > 0; curr = prev, prev = curr->prev) {
         struct flt_task  *task = cork_container_of(curr, struct flt_task, item);
-        size_t  count = task->max - task->min;
-        if (count > left_to_steal) {
-            /* We only need to steal part of this bulk task to reach our theft
-             * goal.  Create a new task instance to hold the portion that we
-             * steal. */
-            size_t  new_min = task->max - left_to_steal;
-            struct flt_task  *new_task = flt->public.new_task
-                (&flt->public, task->name, task->func,
-                 task->ud, new_min, task->max);
-            DEBUG(flt, "Steal %s [%zu,%zu) from context %u",
-                  task->name, new_min, task->max, steal_index);
-            task->max = new_min;
-            new_task->group = task->group;
-            flt_task_group_increment(flt, new_task->group);
-            DEBUG(flt, "Leave %s [%zu,%zu) with context %u",
-                  task->name, task->min, new_min, steal_index);
-            cork_dllist_add_to_head(&flt->ready, &new_task->item);
-            break;
-        } else {
-            /* We need to steal this entire task, and we'll need to steal more
-             * to reach our goal. */
-            DEBUG(flt, "Steal %s [%zu,%zu) from context %u",
-                  task->name, task->min, task->max, steal_index);
-            flt_task_group_move(flt, task->group, steal_from);
-            cork_dllist_remove(&task->item);
-            cork_dllist_add_to_head(&flt->ready, &task->item);
-            left_to_steal -= count;
-        }
+        DEBUG(flt, "Steal %p(%p,%zu) from context %u",
+              task->func, task->ud, task->id, steal_index);
+        flt_task_group_move(flt, task->group, steal_from);
+        cork_dllist_remove(&task->item);
+        cork_dllist_add_to_head(&flt->ready, &task->item);
+        left_to_steal--;
     }
 
     /* Release the lock and return. */
-    steal_from->execution_count -= to_steal;
-    flt->execution_count += to_steal;
+    steal_from->task_count -= to_steal;
+    flt->task_count += to_steal;
     DEBUG(flt, "Context %u now has %zu tasks",
-          steal_index, steal_from->execution_count);
+          steal_index, steal_from->task_count);
     DEBUG(flt, "Context %u now has %zu tasks",
-          flt->public.index, flt->execution_count);
+          flt->public.index, flt->task_count);
     steal_from->waiting_to_steal = NULL;
     flt_spinlock_unlock(&steal_from->lock);
     flt_spinlock_unlock(&flt->lock);
@@ -597,7 +538,6 @@ flt__thread_run(struct cork_thread_body *body)
     struct flt_priv  *flt = cork_container_of(body, struct flt_priv, body);
     unsigned int  spin_count;
     size_t  max_count;
-    size_t  executed_count;
 
     flt_start_stopwatch(flt);
     if (cork_dllist_is_empty(&flt->ready)) {
@@ -633,8 +573,8 @@ start_round:
     /* Precondition: task queue locked, not empty */
 continue_round:
     /* We have at least one task in our queue to run. */
-    executed_count = flt_pop_and_run_one(flt, max_count);
-    max_count -= executed_count;
+    flt_pop_and_run_one(flt);
+    max_count--;
 
     if (CORK_UNLIKELY(cork_dllist_is_empty(&flt->ready))) {
         /* If we just drained the queue after executing this task, then this
@@ -752,8 +692,7 @@ flt_fleet_set_context_count(struct flt_fleet *fleet, unsigned int context_count)
 }
 
 void
-flt_fleet_run_(struct flt_fleet *fleet, const char *name,
-               flt_task *func, void *ud, size_t index)
+flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t index)
 {
     struct flt_priv  *flt;
     struct flt_task_group  *group;
@@ -766,7 +705,7 @@ flt_fleet_run_(struct flt_fleet *fleet, const char *name,
 
     flt = fleet->contexts[0];
     group = flt_task_group_new(&flt->public);
-    task = flt->public.new_task(&flt->public, name, func, ud, index, index + 1);
+    task = flt->public.new_task(&flt->public, func, ud, index);
     flt_task_group_add(&flt->public, group, task);
     flt_task_group_start(&flt->public, group);
 
