@@ -96,7 +96,6 @@ struct flt_priv {
     struct flt_fleet  *fleet;
     struct cork_dllist  ready;
     struct flt_task  *unused_tasks;
-    struct cork_dllist  batches;
     struct cork_dllist  groups;
     size_t  task_count;
     struct cork_thread  *thread;

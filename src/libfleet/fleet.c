@@ -37,57 +37,16 @@ static struct flt_spinlock  debug_lock = FLT_SPINLOCK_INIT();
  * Tasks
  */
 
-/* 8Kb batches */
-#define TASK_BATCH_SIZE  8192
-#define TASK_BATCH_COUNT  (TASK_BATCH_SIZE / sizeof(struct flt_task))
-
-/* Create a new batch of task instances.  Link them all together via their next
- * fields */
-static struct flt_task *
-flt_task_batch_new(struct flt_priv *flt)
-{
-    size_t  i;
-    struct flt_task  *task = cork_malloc(TASK_BATCH_SIZE);
-    struct flt_task  *first;
-    struct flt_task  *curr;
-
-    /* The first task in the batch is reserved, and is used to keep track of the
-     * batches that are owned by this context. */
-    cork_dllist_add_to_tail(&flt->batches, &task->list.item);
-
-    /* This whole operation was kicked off because someone wants to create a new
-     * task instance; the second instance is the batch is the one we'll use for
-     * that. */
-    first = task + 1;
-
-    /* The remaining tasks in the batch can be used by the scheduler.  These
-     * task instances start off local to this context, but might migrate to
-     * other contexts while the scheduler runs.  That's perfectly fine; we keep
-     * track of the batches separately so that we can free everything safely
-     * when the fleet is freed. */
-    for (i = 2, curr = first + 1; i < TASK_BATCH_COUNT; i++, curr++) {
-        curr->list.next = flt->unused_tasks;
-        flt->unused_tasks = curr;
-    }
-
-    return first;
-}
-
-static void
-flt_task_batch_free(struct flt_priv *flt, struct flt_task *batch)
-{
-    free(batch);
-}
-
 static struct flt_task *
 flt_reuse_task(struct flt *pflt, flt_task *func, void *ud, size_t i);
 
 static struct flt_task *
 flt_create_task(struct flt *pflt, flt_task *func, void *ud, size_t i)
 {
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task  *task = flt_task_batch_new(flt);
-    flt->public.new_task = flt_reuse_task;
+    void  *vtask;
+    struct flt_task  *task;
+    posix_memalign(&vtask, FLT_CACHE_LINE_SIZE, sizeof(struct flt_task));
+    task = vtask;
     task->func = func;
     task->ud = ud;
     task->i = i;
@@ -323,7 +282,6 @@ flt_new(struct flt_fleet *fleet, size_t index, size_t count)
     flt->task_count = 0;
     cork_dllist_init(&flt->ready);
     flt->unused_tasks = NULL;
-    cork_dllist_init(&flt->batches);
     cork_dllist_init(&flt->groups);
     flt->body.run = flt__thread_run;
     flt->body.free = flt__thread_free;
@@ -343,7 +301,7 @@ flt_task_batch_list_done(struct flt_priv *flt, struct cork_dllist *list)
     struct cork_dllist_item  *next;
     struct flt_task  *task;
     cork_dllist_foreach(list, curr, next, struct flt_task, task, list.item) {
-        flt_task_batch_free(flt, task);
+        free(task);
     }
 }
 
@@ -361,8 +319,14 @@ flt_task_group_list_done(struct flt_priv *flt, struct cork_dllist *list)
 void
 flt_free(struct flt_priv *flt)
 {
+    struct flt_task  *curr;
+    struct flt_task  *next;
     flt_task_group_list_done(flt, &flt->groups);
-    flt_task_batch_list_done(flt, &flt->batches);
+    flt_task_batch_list_done(flt, &flt->ready);
+    for (curr = flt->unused_tasks; curr != NULL; curr = next) {
+        next = curr->list.next;
+        free(curr);
+    }
     free(flt);
 }
 
