@@ -35,7 +35,10 @@ struct flt_priv;
  * fleet's execution contexts. */
 
 struct flt_task {
-    struct cork_dllist_item  item;
+    union {
+        struct cork_dllist_item  item;
+        struct flt_task  *next;
+    } list;
     const char  *name;
     struct flt_task_group  *group;
     flt_task  *func;
@@ -92,7 +95,7 @@ struct flt_priv {
     struct flt  public;
     struct flt_fleet  *fleet;
     struct cork_dllist  ready;
-    struct cork_dllist  unused;
+    struct flt_task  *unused_tasks;
     struct cork_dllist  batches;
     struct cork_dllist  groups;
     size_t  task_count;

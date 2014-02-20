@@ -53,7 +53,7 @@ flt_task_batch_new(struct flt_priv *flt)
 
     /* The first task in the batch is reserved, and is used to keep track of the
      * batches that are owned by this context. */
-    cork_dllist_add_to_tail(&flt->batches, &task->item);
+    cork_dllist_add_to_tail(&flt->batches, &task->list.item);
 
     /* This whole operation was kicked off because someone wants to create a new
      * task instance; the second instance is the batch is the one we'll use for
@@ -66,7 +66,8 @@ flt_task_batch_new(struct flt_priv *flt)
      * track of the batches separately so that we can free everything safely
      * when the fleet is freed. */
     for (i = 2, curr = first + 1; i < TASK_BATCH_COUNT; i++, curr++) {
-        cork_dllist_add_to_tail(&flt->unused, &curr->item);
+        curr->list.next = flt->unused_tasks;
+        flt->unused_tasks = curr;
     }
 
     return first;
@@ -98,12 +99,11 @@ static struct flt_task *
 flt_reuse_task(struct flt *pflt, flt_task *func, void *ud, size_t i)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct cork_dllist_item  *head = cork_dllist_start(&flt->unused);
-    struct flt_task  *task = cork_container_of(head, struct flt_task, item);
-    if (CORK_UNLIKELY(cork_dllist_is_end(&flt->unused, head->next))) {
+    struct flt_task  *task = flt->unused_tasks;
+    flt->unused_tasks = task->list.next;
+    if (CORK_UNLIKELY(flt->unused_tasks == NULL)) {
         flt->public.new_task = flt_create_task;
     }
-    cork_dllist_remove(head);
     task->func = func;
     task->ud = ud;
     task->i = i;
@@ -114,7 +114,8 @@ flt_reuse_task(struct flt *pflt, flt_task *func, void *ud, size_t i)
 static void
 flt_task_free(struct flt_priv *flt, struct flt_task *task)
 {
-    cork_dllist_add_to_head(&flt->unused, &task->item);
+    task->list.next = flt->unused_tasks;
+    flt->unused_tasks = task;
     flt->public.new_task = flt_reuse_task;
 }
 
@@ -143,7 +144,8 @@ flt_task_group_ctx__done(struct flt *pflt, void *ud, void *vctx)
     struct flt_task  *task;
 
     /* If there any pending tasks that were never scheduled, free them now. */
-    cork_dllist_foreach(&ctx->tasks, curr, next, struct flt_task, task, item) {
+    cork_dllist_foreach(&ctx->tasks, curr, next,
+                        struct flt_task, task, list.item) {
         flt_task_free(flt, task);
     }
 }
@@ -257,7 +259,7 @@ flt_task_group_add(struct flt *pflt, struct flt_task_group *group,
     struct flt_task_group_ctx  *ctx =
         flt_local_get(pflt, group->ctxs, struct flt_task_group_ctx);
     task->group = group;
-    cork_dllist_add_to_head(&ctx->tasks, &task->item);
+    cork_dllist_add_to_head(&ctx->tasks, &task->list.item);
     DEBUG(flt, "Add %p(%p,%zu) to group %p",
           task->func, task->ud, task->i, group);
     flt_task_group_increment(flt, group);
@@ -320,7 +322,7 @@ flt_new(struct flt_fleet *fleet, size_t index, size_t count)
     flt->public.new_task = flt_create_task;
     flt->task_count = 0;
     cork_dllist_init(&flt->ready);
-    cork_dllist_init(&flt->unused);
+    flt->unused_tasks = NULL;
     cork_dllist_init(&flt->batches);
     cork_dllist_init(&flt->groups);
     flt->body.run = flt__thread_run;
@@ -340,7 +342,7 @@ flt_task_batch_list_done(struct flt_priv *flt, struct cork_dllist *list)
     struct cork_dllist_item  *curr;
     struct cork_dllist_item  *next;
     struct flt_task  *task;
-    cork_dllist_foreach(list, curr, next, struct flt_task, task, item) {
+    cork_dllist_foreach(list, curr, next, struct flt_task, task, list.item) {
         flt_task_batch_free(flt, task);
     }
 }
@@ -368,7 +370,7 @@ struct flt_task *
 flt_current_task(struct flt_priv *flt)
 {
     struct cork_dllist_item  *head = cork_dllist_start(&flt->ready);
-    return cork_container_of(head, struct flt_task, item);
+    return cork_container_of(head, struct flt_task, list.item);
 }
 
 struct flt_task_group *
@@ -398,7 +400,7 @@ flt_run(struct flt *pflt, struct flt_task *task)
     /* The current task's group must already be running (otherwise how would we
      * have started the current task?), so we can add the task directly to the
      * context's ready queue, instead of adding it to the group. */
-    cork_dllist_add_to_head(&flt->ready, &task->item);
+    cork_dllist_add_to_head(&flt->ready, &task->list.item);
 
     /* The current execution context must already be active for the current task
      * group (again, because there's already a task that was ready in this group
@@ -423,7 +425,7 @@ flt_run_later(struct flt *pflt, struct flt_task *task)
     /* The current task's group must already be running (otherwise how would we
      * have started the current task?), so we can add the task directly to the
      * context's ready queue, instead of adding it to the group. */
-    cork_dllist_add_to_tail(&flt->ready, &task->item);
+    cork_dllist_add_to_tail(&flt->ready, &task->list.item);
 
     /* The current execution context must already be active for the current task
      * group (again, because there's already a task that was ready in this group
@@ -451,7 +453,7 @@ flt_pop_and_run_one(struct flt_priv *flt)
     struct flt_task  *task = flt_current_task(flt);
     DEBUG(flt, "Run task %p(%p,%zu)", task->func, task->ud, task->i);
     flt_task_run(&flt->public, task);
-    cork_dllist_remove(&task->item);
+    cork_dllist_remove(&task->list.item);
     flt_task_group_decrement(flt, task->group);
     flt_task_free(flt, task);
     flt->task_count--;
@@ -509,12 +511,13 @@ flt_steal(struct flt_priv *flt)
      * beginning. */
     for (curr = cork_dllist_end(&steal_from->ready), prev = curr->prev;
          left_to_steal > 0; curr = prev, prev = curr->prev) {
-        struct flt_task  *task = cork_container_of(curr, struct flt_task, item);
+        struct flt_task  *task =
+            cork_container_of(curr, struct flt_task, list.item);
         DEBUG(flt, "Steal %p(%p,%zu) from context %u",
               task->func, task->ud, task->id, steal_index);
         flt_task_group_move(flt, task->group, steal_from);
-        cork_dllist_remove(&task->item);
-        cork_dllist_add_to_head(&flt->ready, &task->item);
+        cork_dllist_remove(&task->list.item);
+        cork_dllist_add_to_head(&flt->ready, &task->list.item);
         left_to_steal--;
     }
 
