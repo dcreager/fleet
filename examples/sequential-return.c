@@ -46,7 +46,7 @@ run_native(void)
     result = sum;
 }
 
-static flt_task  add_one;
+static flt_task_f  add_one;
 
 static void
 add_one(struct flt *flt, void *ud, size_t i)
