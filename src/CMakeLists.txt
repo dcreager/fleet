@@ -46,6 +46,7 @@ set(LIBCORK_SRC
 )
 
 set(LIBFLEET_SRC
+    libfleet/after.c
     libfleet/fleet.c
     libfleet/local.c
     libfleet/scounter.c

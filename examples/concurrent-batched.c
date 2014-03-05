@@ -54,7 +54,7 @@ static flt_task_f  schedule_one;
 static flt_task_f  schedule;
 
 struct add_ctx {
-    struct flt_scounter_ctx  *counter_ctx;
+    struct flt_after_ctx  *after_ctx;
     unsigned long  result;
 };
 
@@ -62,7 +62,6 @@ static void *
 add_ctx__migrate(struct flt *from, struct flt *to, void *ud, size_t i)
 {
     struct add_ctx  *from_ctx = ud;
-    flt_scounter_ctx_migrate(from, to, from_ctx->counter_ctx);
     return flt_local_ctx_migrate(from, to, from_ctx);
 }
 
@@ -88,9 +87,6 @@ add_one(struct flt *flt, void *ud, size_t index)
     struct add_ctx  *ctx = ud;
     unsigned long  i = index;
     ctx->result += i;
-    if (flt_scounter_ctx_dec(flt, ctx->counter_ctx)) {
-        flt_run(flt, merge_batches, ctx, 0);
-    }
 }
 
 static void
@@ -103,26 +99,24 @@ schedule_one(struct flt *flt, void *ud, size_t index)
     if (j > max) {
         j = max;
     } else {
-        flt_scounter_ctx_inc(flt, ctx->counter_ctx);
-        flt_run_migratable(flt, schedule_one, ctx, j, add_ctx__migrate);
+        flt_start_migratable(flt, schedule_one, ctx, j, add_ctx__migrate);
+        flt_after_ctx_add_step(flt, ctx->after_ctx);
+        flt_run_task(flt);
     }
 
     for (; i < j; i++) {
-        flt_scounter_ctx_inc(flt, ctx->counter_ctx);
-        flt_run_migratable(flt, add_one, ctx, i, add_ctx__migrate);
-    }
-
-    if (flt_scounter_ctx_dec(flt, ctx->counter_ctx)) {
-        flt_run(flt, merge_batches, ctx, 0);
+        flt_start_migratable(flt, add_one, ctx, i, add_ctx__migrate);
+        flt_after_ctx_add_step(flt, ctx->after_ctx);
+        flt_run_task(flt);
     }
 }
 
 static void
 ctx_init(struct flt *flt, void *ud, void *vinstance, unsigned int index)
 {
-    struct flt_scounter  *counter = ud;
+    struct flt_after  *after = ud;
     struct add_ctx  *ctx = vinstance;
-    ctx->counter_ctx = flt_scounter_get(flt, counter, index);
+    ctx->after_ctx = flt_after_get_index(flt, after, index);
     ctx->result = 0;
 }
 
@@ -134,14 +128,17 @@ ctx_done(struct flt *flt, void *ud, void *vinstance, unsigned int index)
 static void
 schedule(struct flt *flt, void *ud, size_t min)
 {
-    struct flt_scounter  *counter;
+    struct flt_after  *after;
     struct flt_local  *local;
     struct add_ctx  *ctx;
-    counter = flt_scounter_new(flt);
-    local = flt_local_new(flt, struct add_ctx, counter, ctx_init, ctx_done);
+    after = flt_after_new(flt);
+    local = flt_local_new(flt, struct add_ctx, after, ctx_init, ctx_done);
     ctx = flt_local_get(flt, local);
-    flt_scounter_inc(flt, counter);
-    flt_run_migratable(flt, schedule_one, ctx, min, add_ctx__migrate);
+    flt_start_migratable(flt, merge_batches, ctx, 0, add_ctx__migrate);
+    flt_after_set_task(flt, after);
+    flt_start_migratable(flt, schedule_one, ctx, min, add_ctx__migrate);
+    flt_after_ctx_add_step(flt, ctx->after_ctx);
+    flt_run_task(flt);
 }
 
 static void

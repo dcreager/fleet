@@ -182,6 +182,37 @@ flt_local_ctx_migrate(struct flt *from, struct flt *to, void *from_instance);
 
 
 /*-----------------------------------------------------------------------
+ * Afters
+ */
+
+struct flt_after;
+struct flt_after_ctx;
+
+struct flt_after *
+flt_after_new(struct flt *flt);
+
+void
+flt_after_set_task(struct flt *flt, struct flt_after *after);
+
+struct flt_after_ctx *
+flt_after_get(struct flt *flt, struct flt_after *after);
+
+struct flt_after_ctx *
+flt_after_get_index(struct flt *flt, struct flt_after *after,
+                    unsigned int index);
+
+struct flt_after_ctx *
+flt_after_ctx_get_index(struct flt *flt, struct flt_after_ctx *after_ctx,
+                        unsigned int index);
+
+void
+flt_after_add_step(struct flt *flt, struct flt_after *after);
+
+void
+flt_after_ctx_add_step(struct flt *flt, struct flt_after_ctx *after_ctx);
+
+
+/*-----------------------------------------------------------------------
  * Semaphore counters
  */
 
