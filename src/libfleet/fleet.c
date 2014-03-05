@@ -109,7 +109,6 @@ struct flt_task {
 
 struct flt_task_deque {
     struct flt_task  *tasks;
-    size_t  task_count;
 };
 
 static struct flt_task_deque *
@@ -118,7 +117,6 @@ flt_task_deque_new(struct flt_priv *flt)
     struct flt_task_deque  *deque = cork_new(struct flt_task_deque);
     DEBUG(3, flt, "New task queue %p", deque);
     deque->tasks = NULL;
-    deque->task_count = 0;
     return deque;
 }
 
@@ -139,14 +137,7 @@ static bool
 flt_task_deque_is_empty(struct flt_priv *flt,
                         const struct flt_task_deque *deque)
 {
-    return deque->task_count == 0;
-}
-
-static size_t
-flt_task_deque_used_size(struct flt_priv *flt,
-                         const struct flt_task_deque *deque)
-{
-    return deque->task_count;
+    return deque->tasks == NULL;
 }
 
 CORK_ATTR_NOINLINE
@@ -159,7 +150,6 @@ flt_task_deque_create_task(struct flt_priv *flt, struct flt_task_deque *deque)
     task = vtask;
     task->next = deque->tasks;
     deque->tasks = task;
-    deque->task_count++;
     DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
           deque, func, ud, i);
     return task;
@@ -172,7 +162,6 @@ flt_task_deque_reuse_task(struct flt_priv *flt, struct flt_task_deque *deque)
     flt->unused = task->next;
     task->next = deque->tasks;
     deque->tasks = task;
-    deque->task_count++;
     DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
           deque, func, ud, i);
     return task;
@@ -193,7 +182,6 @@ flt_task_deque_pop_head(struct flt_priv *flt, struct flt_task_deque *deque)
 {
     struct flt_task  *task = deque->tasks;
     deque->tasks = task->next;
-    deque->task_count--;
     DEBUG(3, flt, "Popped task from %p is %p(%p,%zu)",
           deque, task->func, task->ud, task->i);
     return task;
@@ -204,49 +192,56 @@ static void
 flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
                        struct flt_task_deque *from, struct flt_task_deque *to)
 {
-    size_t  from_used = flt_task_deque_used_size(from_ctx, from);
-    size_t  steal_count = from_used / 2;
-    size_t  skip_count = from_used - steal_count;
-    size_t  skipped_so_far = 0;
+    size_t  steal_count = 0;
+    size_t  skip_count = 0;
     struct flt_task  *curr;
-    struct flt_task  *prev;
+    struct flt_task  *last_to_stay;
+    struct flt_task  *first_to_steal;
 
-    DEBUG(1, from_ctx, "Migrate %zu/%zu tasks into task queue %p",
-          steal_count, from_used, to);
-
-    /* First walk through the list, skipping (total_count - steal_count) tasks.
-     * Those tasks will stay in the `from` deque.  Once we find the first task
-     * that should be moved, we can blit all of the stolen tasks to the `to`
-     * deque in constant time. */
-    for (prev = NULL, curr = from->tasks; skipped_so_far < skip_count;
-         skipped_so_far++) {
-        prev = curr;
+    /* First walk through the list, counting how many tasks should be skipped
+     * and how many should be stolen.  For every two tasks that we walk through,
+     * we bump the `first_to_steal` pointer by one.  The end result should be
+     * that `first_to_steal` points at the task halfway through the linked list,
+     * and that `last_to_stay` points to the task immediately before it, giving
+     * us the dividing point between the tasks that stay and the tasks that
+     * leave. */
+    curr = from->tasks;
+    last_to_stay = NULL;
+    first_to_steal = curr;
+    while (curr != NULL) {
+        last_to_stay = first_to_steal;
+        first_to_steal = first_to_steal->next;
+        skip_count++;
         curr = curr->next;
+
+        if (curr != NULL) {
+            steal_count++;
+            curr = curr->next;
+        }
     }
 
-    /* Once we fall through, `curr` will point at the first task that should be
-     * moved, and `prev` will point at the last task that should stay.  We know
-     * that to->tasks is currently NULL, since we can only steal into an empty
-     * deque. */
-    to->tasks = curr;
-    if (prev == NULL) {
+    DEBUG(1, from_ctx, "Migrate %zu/%zu tasks into task queue %p",
+          steal_count, steal_count + skip_count, to);
+
+    /* Once we fall through, `first_to_steal` and `last_to_stay` should be set
+     * correctly.  We know that to->tasks is currently NULL, since we can only
+     * steal into an empty deque. */
+    to->tasks = first_to_steal;
+    if (last_to_stay == NULL) {
         /* The entire list should move. */
         from->tasks = NULL;
     } else {
-        prev->next = NULL;
+        last_to_stay->next = NULL;
     }
 
     /* Lastly we have to step through all of the just-stolen tasks and call
      * their `migrate` callbacks, to let them update their `ud` parameters. */
-    for (; curr != NULL; curr = curr->next) {
+    for (curr = first_to_steal; curr != NULL; curr = curr->next) {
         DEBUG(3, from_ctx,
               "Migrate task %p(%p,%zu) from %p to %p",
               curr->func, curr->ud, curr->i, from, to);
         curr->ud = flt_task_migrate(from_ctx, to_ctx, curr);
     }
-
-    from->task_count -= steal_count;
-    to->task_count += steal_count;
 }
 
 
@@ -401,8 +396,8 @@ flt_steal(struct flt_priv *flt)
     received = flt->receive;
     success = (received != NOTHING);
     if (success) {
-        DEBUG(1, flt, "Received %zu tasks in queue %p from context %u",
-              flt_task_deque_used_size(flt, received), received, steal_index);
+        DEBUG(1, flt, "Received tasks in queue %p from context %u",
+              received, steal_index);
         flt->ready = received;
     } else {
         DEBUG(1, flt, "Context %u has nothing for us to steal", steal_index);
