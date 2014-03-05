@@ -10,6 +10,7 @@
 #ifndef FLEET_H
 #define FLEET_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 
@@ -28,59 +29,30 @@ struct flt;
 struct flt_task;
 
 typedef void
-flt_task(struct flt *flt, void *ud, size_t i);
+flt_task_f(struct flt *flt, void *ud, size_t i);
 
-struct flt {
-    unsigned int  index;
-    unsigned int  count;
-
-    struct flt_task *
-    (*new_task)(struct flt *, flt_task *, void *, size_t);
-};
-
-#define flt_task_new(flt, func, ud, i) \
-    ((flt)->new_task((flt), (func), (ud), (i)))
+typedef void *
+flt_migrate_f(struct flt *from_ctx, struct flt *to_ctx, void *ud, size_t i);
 
 
 void
-flt_run(struct flt *flt, struct flt_task *task);
+flt_run(struct flt *flt, flt_task_f *func, void *ud, size_t i);
 
 void
-flt_run_later(struct flt *flt, struct flt_task *task);
+flt_run_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
+                   flt_migrate_f *migrate);
 
 #define flt_return_to(flt, task, ud, i)  ((task)((flt), (ud), (i)))
 
 
 /*-----------------------------------------------------------------------
- * Task groups
- */
-
-struct flt_task_group;
-
-struct flt_task_group *
-flt_task_group_new(struct flt *flt);
-
-/* Cannot be called after the group is running.  Thread-safe for `group` */
-void
-flt_task_group_add(struct flt *flt, struct flt_task_group *group,
-                   struct flt_task *task);
-
-void
-flt_task_group_start(struct flt *flt, struct flt_task_group *group);
-
-/* Thread-safe for `group`, but not for `after` */
-void
-flt_task_group_run_after(struct flt *flt, struct flt_task_group *group,
-                         struct flt_task_group *after);
-
-/* Not thread-safe for `after` */
-void
-flt_task_group_run_after_current(struct flt *flt, struct flt_task_group *after);
-
-
-/*-----------------------------------------------------------------------
  * Fleets
  */
+
+struct flt {
+    unsigned int  index;
+    unsigned int  count;
+};
 
 struct flt_fleet;
 
@@ -95,22 +67,21 @@ flt_fleet_set_context_count(struct flt_fleet *fleet,
                             unsigned int context_count);
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task *func, void *ud, size_t i);
+flt_fleet_run(struct flt_fleet *fleet, flt_task_f *func, void *ud, size_t i);
 
 
 /*-----------------------------------------------------------------------
  * Context-local data
  */
 
-struct flt_local {
-    void  *instances;
-};
+struct flt_local;
 
 typedef void
-flt_local_init_f(struct flt *flt, void *ud, void *instance);
+flt_local_init_f(struct flt *flt, void *ud, void *instance, unsigned int index);
 
 typedef void
-flt_local_done_f(struct flt *flt, void *ud, void *instance);
+flt_local_done_f(struct flt *flt, void *ud, void *instance, unsigned int index);
+
 
 struct flt_local *
 flt_local_new_size(struct flt *flt, size_t instance_size, void *ud,
@@ -123,28 +94,80 @@ flt_local_new_size(struct flt *flt, size_t instance_size, void *ud,
 void
 flt_local_free(struct flt *flt, struct flt_local *local);
 
-#define flt_local_get_index(flt, local, type, i) \
-    ((type *) \
-     ((char *) (local)->instances + \
-      (i) * flt_round_to_cache_line(sizeof(type))))
+void
+flt_local_ctx_free(struct flt *flt, void *instance);
 
-#define flt_local_get(flt, local, type) \
-    flt_local_get_index(flt, local, type, (flt)->index)
 
-#define flt_local_foreach(flt, local, i, type, inst) \
-    for ((i) = 0, (inst) = (local)->instances; (i) < (flt)->count; \
-         (i)++, \
-         (inst) = ((type *) (((char *) (inst)) + \
-             flt_round_to_cache_line(sizeof(type)))))
+void *
+flt_local_get(struct flt *flt, struct flt_local *local);
 
-#define flt_local_visit(flt, local, type, visit, ...) \
+void *
+flt_local_get_index(struct flt *flt, struct flt_local *local,
+                    unsigned int index);
+
+void *
+flt_local_ctx_get_index(struct flt *flt, void *instance, unsigned int index);
+
+void *
+flt_local_ctx_migrate(struct flt *from, struct flt *to, void *from_instance);
+
+
+#define flt_local_foreach(flt, type, local, i, inst) \
+    for ((inst) = flt_local_get_index((flt), (local), (i) = 0); \
+         (i) < (flt)->count; \
+         (inst) = flt_local_get_index((flt), (local), ++(i))) \
+
+#define flt_local_visit(flt, type, local, visit, ...) \
     do { \
-        size_t  __i; \
+        unsigned int  __i; \
         type  *__instance; \
-        flt_local_foreach(flt, local, __i, type, __instance) { \
-            (visit)((flt), __instance, __VA_ARGS__); \
+        flt_local_foreach(flt, type, local, __i, __instance) { \
+            (visit)((flt), __i, __instance, __VA_ARGS__); \
         } \
     } while (0)
+
+
+#define flt_local_ctx_foreach(flt, type, this_inst, i, inst) \
+    for ((inst) = flt_local_ctx_get_index((flt), (this_inst), (i) = 0); \
+         (i) < (flt)->count; \
+         (inst) = flt_local_ctx_get_index((flt), (this_inst), ++(i))) \
+
+#define flt_local_ctx_visit(flt, type, this_inst, visit, ...) \
+    do { \
+        unsigned int  __i; \
+        type  *__instance; \
+        flt_local_ctx_foreach(flt, type, this_inst, __i, __instance) { \
+            (visit)((flt), __i, __instance, __VA_ARGS__); \
+        } \
+    } while (0)
+
+
+/*-----------------------------------------------------------------------
+ * Semaphore counters
+ */
+
+struct flt_scounter;
+
+struct flt_scounter *
+flt_scounter_new(struct flt *flt);
+
+struct flt_scounter_ctx *
+flt_scounter_get(struct flt *flt, struct flt_scounter *counter,
+                 unsigned int index);
+
+void
+flt_scounter_inc(struct flt *flt, struct flt_scounter *counter);
+
+void
+flt_scounter_ctx_inc(struct flt *flt, struct flt_scounter_ctx *counter_ctx);
+
+/* Returns true if this decrements the counter to 0. */
+bool
+flt_scounter_ctx_dec(struct flt *flt, struct flt_scounter_ctx *counter_ctx);
+
+struct flt_scounter_ctx *
+flt_scounter_ctx_migrate(struct flt *from, struct flt *to,
+                         struct flt_scounter_ctx *counter_ctx);
 
 
 #endif /* FLEET_H */

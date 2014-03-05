@@ -7,101 +7,145 @@
  * ----------------------------------------------------------------------
  */
 
+#include <stdlib.h>
+
 #include "libcork/core.h"
 #include "libcork/ds.h"
 
 #include "fleet.h"
-#include "fleet/task.h"
 
 
 /*-----------------------------------------------------------------------
  * Context-local data
  */
 
-/* To eliminate false sharing we want to make sure that each element of the
- * instances array is in a separate cache line.  This involves two steps: first,
- * we have to round up the size of each element so that it's a multiple of the
- * cache line size.  This is handled in the fleet.h public header file with all
- * of the calls to flt_round_to_cache_line.  Second, we have to make sure that
- * the start of the array is also rounded to a cache line.  malloc() doesn't
- * guarantee this, and if we get an unaligned array, then each element will span
- * a cache line boundary, and we'll definitely get some false sharing.
+/* We need to allocate one instance of the user's type for each execution
+ * context.  To eliminate false sharing, we want to make sure that each user
+ * instance is in a separate cache line.  We also need to allocate some shared
+ * state that ties all of the instances together.  And lastly, we need to be
+ * able to easily get to that shared state from any of the individual
+ * per-context instance pointers.
  *
- * To support this second step, we have two pointers for the array of elements.
- * unaligned_instances is the raw pointer that we get back from malloc().
- * public.instances is guaranteed to be aligned to a cache line.  This aligned
- * pointer is visible via the public API, and is how user code gets pointers to
- * the individual elements of the array.  We have to keep the unaligned pointer
- * around, as well, since we'll have to pass the same pointer to free() that we
- * got from malloc().
+ * For now, we're going for a naïve approach, where we allocate a separate copy
+ * of `flt_local` for each instance.  (We could allocate one `flt_local`, and
+ * store a per-instance pointer to the single instance; however, because of the
+ * cache-line alignment constraint, that wouldn't really save us any space.)
+ *
+ * So, we allocate a single large chunk of memory, containing interleaved
+ * instances of `flt_local` and the user type:
+ *
+ *     +-------------+------------+-------------+------------+-----+
+ *     | flt_local 0 | instance 0 | flt_local 1 | instance 1 | ... |
+ *     +-------------+------------+-------------+------------+-----+
+ *
+ * To satisfy the cache-line alignment constraint, we round up the size of each
+ * slot to the size of a cache line, and use posix_memalign() to make sure that
+ * the entire chunk of memory is aligned to a cache line.
  */
 
-struct flt_local_priv {
-    struct flt_local  public;
-    void  *unaligned_instances;
-    size_t  padded_size;
+struct flt_local {
+    size_t  padded_element_size;
     void  *ud;
     flt_local_done_f  *done_instance;
 };
 
-static void *
-align_to_cache_line(void *unaligned)
-{
-    uintptr_t  addr = (uintptr_t) unaligned;
-    if ((addr % FLT_CACHE_LINE_SIZE) != 0) {
-        addr = ((addr / FLT_CACHE_LINE_SIZE) + 1) * FLT_CACHE_LINE_SIZE;
-        return (void *) addr;
-    } else {
-        return unaligned;
-    }
-}
+#define PADDED_HEADER_SIZE  (flt_round_to_cache_line(sizeof(struct flt_local)))
 
 struct flt_local *
-flt_local_new_size(struct flt *pflt, size_t instance_size, void *ud,
+flt_local_new_size(struct flt *flt, size_t instance_size, void *ud,
                    flt_local_init_f *init_instance,
                    flt_local_done_f *done_instance)
 {
     unsigned int  i;
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_local_priv  *local = cork_new(struct flt_local_priv);
-    size_t  padded_size = flt_round_to_cache_line(instance_size);
+    void  *root;
+    size_t  padded_instance_size = flt_round_to_cache_line(instance_size);
+    size_t  padded_element_size = PADDED_HEADER_SIZE + padded_instance_size;
     size_t  full_size;
-    char  *instance;
+    char  *element;
 
-    local->ud = ud;
-    local->done_instance = done_instance;
-    local->padded_size = padded_size;
+    full_size = padded_element_size * flt->count;
+    posix_memalign(&root, FLT_CACHE_LINE_SIZE, full_size);
 
-    /* Normally the array is simply `count` copies of padded size.  But since we
-     * might need to align the pointer after it's been allocated, we allocate an
-     * extra cache line of space.  This gives us the wiggle room that we need to
-     * bump the pointer up to the next cache line boundary without running out
-     * of space at the end of the array. */
-    full_size = flt->public.count * padded_size;
-    local->unaligned_instances =
-        cork_calloc(1, full_size + FLT_CACHE_LINE_SIZE);
-    instance = align_to_cache_line(local->unaligned_instances);
-    local->public.instances = instance;
-
-    /* Now that we have an aligned array of elements, initialize each one. */
-    for (i = 0; i < flt->public.count; i++, instance += padded_size) {
-        init_instance(pflt, ud, instance);
+    /* Initialize each of the user elements */
+    element = root;
+    for (i = 0; i < flt->count; i++, element += padded_element_size) {
+        struct flt_local  *local = (struct flt_local *) element;
+        void  *instance = element + PADDED_HEADER_SIZE;
+        local->padded_element_size = padded_element_size;
+        local->ud = ud;
+        local->done_instance = done_instance;
+        init_instance(flt, ud, instance, i);
     }
-    return &local->public;
+
+    return root;
+}
+
+static void
+flt_local_root_free(struct flt *flt, void *root)
+{
+    size_t  i;
+    struct flt_local  *local = root;
+    size_t  padded_element_size = local->padded_element_size;
+    char  *element;
+
+    /* Finalize each of the user elements */
+    element = root;
+    for (i = 0; i < flt->count; i++, element += padded_element_size) {
+        void  *instance = element + PADDED_HEADER_SIZE;
+        local->done_instance(flt, local->ud, instance, i);
+    }
+    free(root);
 }
 
 void
-flt_local_free(struct flt *pflt, struct flt_local *plocal)
+flt_local_free(struct flt *flt, struct flt_local *local)
 {
-    size_t  i;
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_local_priv  *local =
-        cork_container_of(plocal, struct flt_local_priv, public);
-    char  *instance;
-    for (i = 0, instance = local->public.instances; i < flt->public.count;
-         i++, instance += local->padded_size) {
-        local->done_instance(pflt, local->ud, instance);
-    }
-    free(local->unaligned_instances);
-    free(local);
+    flt_local_root_free(flt, local);
+}
+
+void
+flt_local_ctx_free(struct flt *flt, void *instance)
+{
+    char  *element = ((char *) instance) - PADDED_HEADER_SIZE;
+    struct flt_local  *local = (struct flt_local *) element;
+    size_t  padded_element_size = local->padded_element_size;
+    char  *root = element - padded_element_size * flt->index;
+    flt_local_root_free(flt, root);
+}
+
+void *
+flt_local_get(struct flt *flt, struct flt_local *local)
+{
+    char  *root = (char *) local;
+    size_t  padded_element_size = local->padded_element_size;
+    return root + PADDED_HEADER_SIZE + padded_element_size * flt->index;
+}
+
+void *
+flt_local_get_index(struct flt *flt, struct flt_local *local,
+                    unsigned int index)
+{
+    char  *root = (char *) local;
+    size_t  padded_element_size = local->padded_element_size;
+    return root + PADDED_HEADER_SIZE + padded_element_size * index;
+}
+
+void *
+flt_local_ctx_get_index(struct flt *flt, void *instance, unsigned int index)
+{
+    char  *element = ((char *) instance) - PADDED_HEADER_SIZE;
+    struct flt_local  *local = (struct flt_local *) element;
+    size_t  padded_element_size = local->padded_element_size;
+    return ((char *) instance) +
+        padded_element_size * (int) (index - flt->index);
+}
+
+void *
+flt_local_ctx_migrate(struct flt *from, struct flt *to, void *from_instance)
+{
+    char  *element = ((char *) from_instance) - PADDED_HEADER_SIZE;
+    struct flt_local  *local = (struct flt_local *) element;
+    size_t  padded_element_size = local->padded_element_size;
+    return ((char *) from_instance) +
+        padded_element_size * (int) (to->index - from->index);
 }

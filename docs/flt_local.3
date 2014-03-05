@@ -6,23 +6,29 @@ flt_local \[en] Context\-local storage
 .PP
 \f[B]#include <fleet.h>\f[]
 .PP
-\f[B]struct flt_local\f[];
+typedef void
+.PD 0
+.P
+.PD
+\f[B]flt_local_init_f\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[],
+void *\f[I]instance\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int \f[I]index\f[]);
 .PP
 typedef void
 .PD 0
 .P
 .PD
-(\f[B]flt_local_init_f\f[])(struct flt *\f[I]flt\f[], void *\f[I]ud\f[],
-void *\f[I]instance\f[]);
-.PP
-typedef void
+\f[B]flt_local_done_f\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[],
+void *\f[I]instance\f[],
 .PD 0
 .P
 .PD
-(\f[B]flt_local_done_f\f[])(struct flt *\f[I]flt\f[], void *\f[I]ud\f[],
-void *\f[I]instance\f[]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int \f[I]index\f[]);
 .PP
-struct flt_local *
+void *
 .PD 0
 .P
 .PD
@@ -44,39 +50,115 @@ void
 \f[B]flt_local_free\f[](struct flt *\f[I]flt\f[], struct flt_local
 *\f[I]local\f[]);
 .PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_local_ctx_free\f[](struct flt *\f[I]flt\f[], void
+*\f[I]instance\f[]);
+.PP
 void *
 .PD 0
 .P
 .PD
 \f[B]flt_local_get\f[](struct flt *\f[I]flt\f[], struct flt_local
-*\f[I]local\f[], TYPE \f[I]type\f[]);
+*\f[I]local\f[]);
+.PP
+void *
+.PD 0
+.P
+.PD
+\f[B]flt_local_get_index\f[](struct flt *\f[I]flt\f[], struct flt_local
+*\f[I]local\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int \f[I]index\f[]);
+.PP
+void *
+.PD 0
+.P
+.PD
+\f[B]flt_local_ctx_get_index\f[](struct flt *\f[I]flt\f[], void
+*\f[I]instance\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int
+\f[I]index\f[]);
+.PP
+void *
+.PD 0
+.P
+.PD
+\f[B]flt_local_ctx_migrate\f[](struct flt *\f[I]from\f[], struct flt
+*\f[I]to\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]from_local\f[]);
 .PP
 typedef void
 .PD 0
 .P
 .PD
-\f[B]flt_local_visit_f\f[](struct flt *\f[I]flt\f[], \f[I]type\f[]
-*\f[I]instance\f[], \&...);
+\f[B]flt_local_visit_f\f[](struct flt *\f[I]flt\f[], unsigned int
+\f[I]index\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \f[I]type\f[] *\f[I]instance\f[],
+\&...);
 .PP
 void
 .PD 0
 .P
 .PD
-\f[B]flt_local_visit\f[](struct flt *\f[I]flt\f[], struct flt_local
-*\f[I]local\f[],
+\f[B]flt_local_visit\f[](struct flt *\f[I]flt\f[], TYPE \f[I]type\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ TYPE \f[I]type\f[], flt_local_visit_f
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ struct flt_local *\f[I]local\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_local_visit_f *\f[I]visitor\f[],
+\f[I]\&...\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_local_ctx_visit\f[](struct flt *\f[I]flt\f[], TYPE
+\f[I]type\f[], void *\f[I]instance\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_local_visit_f
 *\f[I]visitor\f[], \f[I]\&...\f[]);
 .PP
-\f[B]flt_local_foreach\f[](struct flt *\f[I]flt\f[], struct flt_local
-*\f[I]local\f[],
+\f[B]flt_local_foreach\f[](struct flt *\f[I]flt\f[], TYPE \f[I]type\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ size_t &\f[I]i\f[], TYPE
-\f[I]type\f[], \f[I]type\f[] &*\f[I]instance\f[])
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ struct flt_local *\f[I]local\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ size_t &\f[I]i\f[], \f[I]type\f[]
+&*\f[I]instance\f[])
+.PD 0
+.P
+.PD
+\ \ \ \ STATEMENT
+.PP
+\f[B]flt_local_ctx_foreach\f[](struct flt *\f[I]flt\f[], TYPE
+\f[I]type\f[], void *\f[I]instance\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ size_t &\f[I]i\f[],
+\f[I]type\f[] &*\f[I]instance\f[])
 .PD 0
 .P
 .PD
@@ -92,32 +174,44 @@ individual instance; the \f[B]flt_local\f[] manager is then responsible
 for the actual life cycle of the instances, and for providing the
 instance associated with a particular execution context.
 .PP
-\f[B]flt_local_new\f[]() creates a new \f[B]flt_local\f[] manager,
-creating an instance of \f[I]type\f[] for each execution context in the
-fleet.
-This new manager will use \f[I]init_instance\f[] and
-\f[I]done_instance\f[] to initialize and finalize the data instances
-that it manages.
+There are two ways to refer to a group of context\-local data instances.
+The \f[B]flt_local\f[] functions take in an \f[B]flt_local\f[] instance,
+which refers to the entire group of data instances.
+The \f[B]flt_local_ctx\f[] functions take in an \f[I]instance\f[]
+pointer to the data instance that belongs to the \f[I]flt\f[] execution
+context.
+.PP
+\f[B]flt_local_new\f[]() creates a new instance of \f[I]type\f[] for
+each context in the fleet, and returns an \f[B]flt_local\f[] that
+manages those instances.
+We will use \f[I]init_instance\f[] and \f[I]done_instance\f[] to
+initialize and finalize each of these data instances.
 Your \f[I]init_instance\f[] callback will be called exactly once for
 each execution context in the fleet.
-Note that your initialization function is given a pointer to the
-\f[B]flt\f[](3) instance that it belongs to, in case you need to store
-this somewhere in your data structure.
+Note that the \f[B]flt\f[](3) instance that is passed in to your
+initialization function is the one that creates the \f[B]flt_local\f[]
+data instances.
+It is \f[I]not\f[] the context that owns the instance being initialized.
 .PP
-\f[B]flt_local_free\f[]() frees an \f[B]flt_local\f[] manager, and any
-instances that it has created.
-If the manager is shared among multiple tasks, you must ensure that only
-one of them frees it, and only does so when all of the other tasks are
-done using it.
+\f[B]flt_local_free\f[]() and \f[B]flt_local_ctx_free\f[]() free all of
+the instances managed by this \f[B]flt_local\f[].
+Note that both functions free the entire \f[B]flt_local\f[], along with
+\f[I]all\f[] of the context\-specific data instances.
+You must call exactly one of these functions exactly once for each
+\f[B]flt_local\f[] that you allocate.
 .PP
-\f[B]flt_local_get\f[]() returns the data instance for a particular
-execution context.
-The result will be a pointer to an instance of \f[I]type\f[], which must
-match the type passed in to the \f[B]flt_local_new\f[]() constructor.
+\f[B]flt_local_get\f[]() returns the data instance that belongs to
+\f[I]flt\f[].
+\f[B]flt_local_get_index\f[]() and \f[B]flt_local_ctx_get_index\f[]()
+return the data instance that belongs to the context with the given
+integer index.
+\f[B]flt_local_ctx_migrate\f[]() takes in the data instance that belongs
+to the \f[I]from\f[] context, and returns the data instance that belongs
+to the \f[I]to\f[] context.
 .PP
-\f[B]flt_local_visit\f[]() calls a \f[I]visitor\f[] function once for
-each of the context\-specific instances in the \f[B]flt_local\f[]
-manager.
+\f[B]flt_local_visit\f[]() and \f[B]flt_local_ctx_visit\f[]() call a
+\f[I]visitor\f[] function once for each of the context\-specific
+instances.
 \f[I]type\f[] must match the type passed in to the
 \f[B]flt_local_new\f[]() constructor.
 Any additional \f[I]\&...\f[] parameters will be passed as\-is to the
@@ -130,18 +224,20 @@ because of limitations of the C preprocessor.) For instance, if your
 .nf
 \f[C]
 static\ void
-visit(struct\ flt\ *flt,\ struct\ my_type\ *instance,\ size_t\ *count)
+visit(struct\ flt\ *flt,\ unsigned\ int\ index,
+\ \ \ \ \ \ struct\ my_type\ *instance,\ size_t\ *count)
 {
 \ \ \ \ (*count)++;
 }
 
 size_t\ \ count\ =\ 0;
-flt_local_visit(flt,\ local,\ struct\ my_type,\ visit,\ &count);
+flt_local_visit(flt,\ struct\ my_type,\ local,\ visit,\ &count);
 \f[]
 .fi
 .PP
-\f[B]flt_local_foreach\f[]() is a custom control structure that will
-execute a statement once for each context\-specific instance.
+\f[B]flt_local_foreach\f[]() and \f[B]flt_local_ctx_foreach\f[]() are
+custom control structures that will execute a statement once for each
+context\-specific instance.
 \f[I]i\f[] must be the name of a \f[C]size_t\f[] variable that you've
 allocated.
 \f[I]type\f[] must match the type passed in to the
@@ -154,21 +250,21 @@ For instance:
 \f[C]
 size_t\ \ i;
 struct\ my_type\ \ *ctx;
-flt_local_foreach(flt,\ local,\ i,\ struct\ my_type,\ ctx)\ {
+flt_local_foreach(flt,\ struct\ my_type,\ local,\ i,\ ctx)\ {
 \ \ \ \ /*\ Within\ the\ block,\ `ctx`\ is\ one\ of\ the\ context\-specific
 \ \ \ \ \ *\ instances,\ and\ `i`\ is\ its\ index.\ */
 }
 \f[]
 .fi
 .PP
-Both \f[B]flt_local_visit\f[]() and \f[B]flt_local_foreach\f[]() will
-cause the current task to access data that is technically owned by some
-other execution context; it is your responsibility to make sure this
-happens in a thread\-safe manner.
+All of these iteration functions will cause the current task to access
+data that is technically owned by some other execution context; it is
+your responsibility to make sure this happens in a thread\-safe manner.
 You will usually use this function in a cleanup task to \[lq]merge\[rq]
-partial results that were calculated in each execution context, using
-one of the \f[B]flt_task_group_run_after\f[](3) family of functions.
+partial results that were calculated in each execution context, using an
+\f[B]flt_scounter\f[](3) to make sure that the cleanup task doesn't
+execute until all of parent tasks have finished.
 .SH RETURN VALUES
 .PP
 \f[B]flt_local_new\f[]() will always return a valid new
-\f[B]flt_local\f[] manager.
+\f[B]flt_local\f[] instance.
