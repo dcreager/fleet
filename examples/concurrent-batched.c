@@ -48,66 +48,100 @@ run_native(void)
     result = sum;
 }
 
-static flt_task  add_one;
-static flt_task  merge_batches;
-static flt_task  schedule;
+static flt_task_f  add_one;
+static flt_task_f  merge_batches;
+static flt_task_f  schedule_one;
+static flt_task_f  schedule;
+
+struct add_ctx {
+    struct flt_scounter_ctx  *counter_ctx;
+    unsigned long  result;
+};
+
+static void *
+add_ctx__migrate(struct flt *from, struct flt *to, void *ud, size_t i)
+{
+    struct add_ctx  *from_ctx = ud;
+    flt_scounter_ctx_migrate(from, to, from_ctx->counter_ctx);
+    return flt_local_ctx_migrate(from, to, from_ctx);
+}
+
+
+static void
+merge_one_batch(struct flt *flt, unsigned int index, struct add_ctx *ctx,
+                int dummy)
+{
+    result += ctx->result;
+}
+
+static void
+merge_batches(struct flt *flt, void *ud, size_t i)
+{
+    struct add_ctx  *ctx = ud;
+    flt_local_ctx_visit(flt, struct add_ctx, ctx, merge_one_batch, 0);
+    flt_local_ctx_free(flt, ctx);
+}
 
 static void
 add_one(struct flt *flt, void *ud, size_t index)
 {
-    struct flt_local  *local = ud;
-    unsigned long  *result = flt_local_get(flt, local, unsigned long);
+    struct add_ctx  *ctx = ud;
+    unsigned long  i = index;
+    ctx->result += i;
+    if (flt_scounter_ctx_dec(flt, ctx->counter_ctx)) {
+        flt_run(flt, merge_batches, ctx, 0);
+    }
+}
+
+static void
+schedule_one(struct flt *flt, void *ud, size_t index)
+{
+    struct add_ctx  *ctx = ud;
     unsigned long  i = index;
     unsigned long  j = i + batch_size;
 
     if (j > max) {
         j = max;
     } else {
-        struct flt_task  *task = flt_task_new(flt, add_one, local, j);
-        flt_run_later(flt, task);
+        flt_scounter_ctx_inc(flt, ctx->counter_ctx);
+        flt_run_migratable(flt, schedule_one, ctx, j, add_ctx__migrate);
     }
 
     for (; i < j; i++) {
-        *result += i;
+        flt_scounter_ctx_inc(flt, ctx->counter_ctx);
+        flt_run_migratable(flt, add_one, ctx, i, add_ctx__migrate);
+    }
+
+    if (flt_scounter_ctx_dec(flt, ctx->counter_ctx)) {
+        flt_run(flt, merge_batches, ctx, 0);
     }
 }
 
 static void
-merge_one_batch(struct flt *flt, unsigned long *batch_count, int dummy)
+ctx_init(struct flt *flt, void *ud, void *vinstance, unsigned int index)
 {
-    result += *batch_count;
+    struct flt_scounter  *counter = ud;
+    struct add_ctx  *ctx = vinstance;
+    ctx->counter_ctx = flt_scounter_get(flt, counter, index);
+    ctx->result = 0;
 }
 
 static void
-merge_batches(struct flt *flt, void *ud, size_t i)
-{
-    struct flt_local  *local = ud;
-    flt_local_visit(flt, local, unsigned long, merge_one_batch, 0);
-    flt_local_free(flt, local);
-}
-
-static void
-ulong_init(struct flt *flt, void *ud, void *vinstance)
-{
-}
-
-static void
-ulong_done(struct flt *flt, void *ud, void *vinstance)
+ctx_done(struct flt *flt, void *ud, void *vinstance, unsigned int index)
 {
 }
 
 static void
 schedule(struct flt *flt, void *ud, size_t min)
 {
+    struct flt_scounter  *counter;
     struct flt_local  *local;
-    struct flt_task_group  *group;
-    struct flt_task  *task;
-    local = flt_local_new(flt, unsigned long, NULL, ulong_init, ulong_done);
-    group = flt_task_group_new(flt);
-    flt_task_group_run_after_current(flt, group);
-    task = flt_task_new(flt, merge_batches, local, 0);
-    flt_task_group_add(flt, group, task);
-    return flt_return_to(flt, add_one, local, min);
+    struct add_ctx  *ctx;
+    counter = flt_scounter_new(flt);
+    local = flt_local_new(flt, struct add_ctx, counter, ctx_init, ctx_done);
+    ctx = flt_local_get(flt, local);
+    flt_scounter_inc(flt, counter);
+    flt_run_migratable(flt, schedule_one, ctx, min, add_ctx__migrate);
 }
 
 static void
