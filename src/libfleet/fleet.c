@@ -7,6 +7,7 @@
  * ----------------------------------------------------------------------
  */
 
+#include <stdarg.h>
 #include <string.h>
 
 #include "libcork/core.h"
@@ -58,6 +59,8 @@ struct flt_priv {
     struct flt_task_deque  *ready;
     struct flt_task_deque  *migrating;
 
+    struct flt_task  *pending;
+
     uint8_t  padding[FLT_CACHE_LINE_SIZE];
 
     unsigned int  next_to_steal_from;
@@ -93,19 +96,39 @@ struct flt_fleet {
  */
 
 struct flt_task {
-    struct flt_task  *next;
     flt_task_f  *func;
     void  *ud;
     size_t  i;
     flt_migrate_f  *migrate;
+    struct flt_task  *deque_next;
+    struct flt_task  *next;
+    struct flt_priv  *creator;
 };
 
-#define flt_task_run(flt, task) \
-    ((task)->func(&(flt)->public, (task)->ud, (task)->i))
+static void
+flt_task_run(struct flt_priv *flt, struct flt_task *task)
+{
+    for (; task != NULL; task = task->next) {
+        DEBUG(3, flt, "Run task step %p(%p,%zu)",
+              task->func, task->ud, task->i);
+        task->func(&flt->public, task->ud, task->i);
+    }
+}
 
-#define flt_task_migrate(from_ctx, to_ctx, task) \
-    ((task)->migrate(&(from_ctx)->public, &(to_ctx)->public, \
-                     (task)->ud, (task)->i))
+CORK_ATTR_NOINLINE
+static void
+flt_task_migrate(struct flt_priv *to, struct flt_task *task,
+                 struct flt_priv *from)
+{
+    for (; task != NULL; task = task->next) {
+        task->ud = task->migrate(&from->public, &to->public, task->ud, task->i);
+    }
+}
+
+
+/*-----------------------------------------------------------------------
+ * Task deques
+ */
 
 struct flt_task_deque {
     struct flt_task  *tasks;
@@ -127,7 +150,7 @@ flt_task_deque_free(struct flt_priv *flt, struct flt_task_deque *deque)
     struct flt_task  *next;
     DEBUG(3, flt, "Free task queue %p", deque);
     for (curr = deque->tasks; curr != NULL; curr = next) {
-        next = curr->next;
+        next = curr->deque_next;
         free(curr);
     }
     free(deque);
@@ -140,48 +163,21 @@ flt_task_deque_is_empty(struct flt_priv *flt,
     return deque->tasks == NULL;
 }
 
-CORK_ATTR_NOINLINE
-static struct flt_task *
-flt_task_deque_create_task(struct flt_priv *flt, struct flt_task_deque *deque)
+static void
+flt_task_deque_push_head(struct flt_priv *flt, struct flt_task_deque *deque,
+                         struct flt_task *task)
 {
-    void  *vtask;
-    struct flt_task  *task;
-    posix_memalign(&vtask, 64, sizeof(struct flt_task));
-    task = vtask;
-    task->next = deque->tasks;
+    task->deque_next = deque->tasks;
     deque->tasks = task;
     DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          deque, func, ud, i);
-    return task;
-}
-
-static struct flt_task *
-flt_task_deque_reuse_task(struct flt_priv *flt, struct flt_task_deque *deque)
-{
-    struct flt_task  *task = flt->unused;
-    flt->unused = task->next;
-    task->next = deque->tasks;
-    deque->tasks = task;
-    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          deque, func, ud, i);
-    return task;
-}
-
-static struct flt_task *
-flt_task_deque_new_task(struct flt_priv *flt, struct flt_task_deque *deque)
-{
-    if (CORK_UNLIKELY(flt->unused == NULL)) {
-        return flt_task_deque_create_task(flt, deque);
-    } else {
-        return flt_task_deque_reuse_task(flt, deque);
-    }
+          deque, task->func, task->ud, task->i);
 }
 
 static struct flt_task *
 flt_task_deque_pop_head(struct flt_priv *flt, struct flt_task_deque *deque)
 {
     struct flt_task  *task = deque->tasks;
-    deque->tasks = task->next;
+    deque->tasks = task->deque_next;
     DEBUG(3, flt, "Popped task from %p is %p(%p,%zu)",
           deque, task->func, task->ud, task->i);
     return task;
@@ -210,13 +206,13 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
     first_to_steal = curr;
     while (curr != NULL) {
         last_to_stay = first_to_steal;
-        first_to_steal = first_to_steal->next;
+        first_to_steal = first_to_steal->deque_next;
         skip_count++;
-        curr = curr->next;
+        curr = curr->deque_next;
 
         if (curr != NULL) {
             steal_count++;
-            curr = curr->next;
+            curr = curr->deque_next;
         }
     }
 
@@ -231,23 +227,74 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
         /* The entire list should move. */
         from->tasks = NULL;
     } else {
-        last_to_stay->next = NULL;
+        last_to_stay->deque_next = NULL;
     }
 
     /* Lastly we have to step through all of the just-stolen tasks and call
      * their `migrate` callbacks, to let them update their `ud` parameters. */
-    for (curr = first_to_steal; curr != NULL; curr = curr->next) {
+    for (curr = first_to_steal; curr != NULL; curr = curr->deque_next) {
         DEBUG(3, from_ctx,
               "Migrate task %p(%p,%zu) from %p to %p",
               curr->func, curr->ud, curr->i, from, to);
-        curr->ud = flt_task_migrate(from_ctx, to_ctx, curr);
+        flt_task_migrate(to_ctx, curr, from_ctx);
     }
 }
 
 
 /*-----------------------------------------------------------------------
- * Execution contexts
+ * Scheduling tasks immediately
  */
+
+CORK_ATTR_NOINLINE
+static void
+flt_create_ready_task(struct flt_priv *flt, flt_task_f *func,
+                      void *ud, size_t i, flt_migrate_f *migrate)
+{
+    struct flt_task  *task = cork_new(struct flt_task);
+    task->func = func;
+    task->ud = ud;
+    task->i = i;
+    task->migrate = migrate;
+    task->next = NULL;
+    flt_task_deque_push_head(flt, flt->ready, task);
+}
+
+static void
+flt_reuse_ready_task(struct flt_priv *flt, flt_task_f *func,
+                     void *ud, size_t i, flt_migrate_f *migrate)
+{
+    struct flt_task  *task = flt->unused;
+    flt->unused = task->next;
+    task->func = func;
+    task->ud = ud;
+    task->i = i;
+    task->migrate = migrate;
+    task->next = NULL;
+    flt_task_deque_push_head(flt, flt->ready, task);
+}
+
+static void
+flt_new_ready_task(struct flt_priv *flt, flt_task_f *func,
+                   void *ud, size_t i, flt_migrate_f *migrate)
+{
+    if (CORK_UNLIKELY(flt->unused == NULL)) {
+        flt_create_ready_task(flt, func, ud, i, migrate);
+    } else {
+        flt_reuse_ready_task(flt, func, ud, i, migrate);
+    }
+}
+
+static void
+flt_release_task(struct flt_priv *flt, struct flt_task *task)
+{
+    struct flt_task  *last = task;
+    while (CORK_UNLIKELY(last->next != NULL)) {
+        last = last->next;
+    }
+    last->next = flt->unused;
+    flt->unused = task;
+}
+
 
 static void *
 flt_default_migrate(struct flt *from_ctx, struct flt *to_ctx,
@@ -260,11 +307,7 @@ void
 flt_run(struct flt *pflt, flt_task_f *func, void *ud, size_t i)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task  *task = flt_task_deque_new_task(flt, flt->ready);
-    task->func = func;
-    task->ud = ud;
-    task->i = i;
-    task->migrate = flt_default_migrate;
+    flt_new_ready_task(flt, func, ud, i, flt_default_migrate);
 }
 
 void
@@ -272,13 +315,186 @@ flt_run_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
                    flt_migrate_f *migrate)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task  *task = flt_task_deque_new_task(flt, flt->ready);
+    flt_new_ready_task(flt, func, ud, i, migrate);
+}
+
+
+/*-----------------------------------------------------------------------
+ * Scheduling tasks later
+ */
+
+CORK_ATTR_NOINLINE
+static void
+flt_create_pending_task(struct flt_priv *flt, flt_task_f *func,
+                        void *ud, size_t i, flt_migrate_f *migrate,
+                        struct flt_task *next)
+{
+    struct flt_task  *task = cork_new(struct flt_task);
     task->func = func;
     task->ud = ud;
     task->i = i;
     task->migrate = migrate;
+    task->next = next;
+    flt->pending = task;
 }
 
+static void
+flt_reuse_pending_task(struct flt_priv *flt, flt_task_f *func,
+                       void *ud, size_t i, flt_migrate_f *migrate,
+                       struct flt_task *next)
+{
+    struct flt_task  *task = flt->unused;
+    flt->unused = task->next;
+    task->func = func;
+    task->ud = ud;
+    task->i = i;
+    task->migrate = migrate;
+    task->next = next;
+    flt->pending = task;
+}
+
+static void
+flt_new_pending_task(struct flt_priv *flt, flt_task_f *func,
+                     void *ud, size_t i, flt_migrate_f *migrate,
+                     struct flt_task *next)
+{
+    if (CORK_UNLIKELY(flt->unused == NULL)) {
+        flt_create_pending_task(flt, func, ud, i, migrate, next);
+    } else {
+        flt_reuse_pending_task(flt, func, ud, i, migrate, next);
+    }
+}
+
+
+void
+flt_start_task(struct flt *pflt, flt_task_f *func, void *ud, size_t i)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_new_pending_task(flt, func, ud, i, flt_default_migrate, NULL);
+}
+
+void
+flt_start_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
+                     flt_migrate_f *migrate)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_new_pending_task(flt, func, ud, i, migrate, NULL);
+}
+
+
+void
+flt_add_pre_step(struct flt *pflt, flt_task_f *func, void *ud, size_t i)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_new_pending_task(flt, func, ud, i, flt_default_migrate, flt->pending);
+}
+
+void
+flt_add_pre_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
+                       flt_migrate_f *migrate)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_new_pending_task(flt, func, ud, i, migrate, flt->pending);
+}
+
+
+CORK_ATTR_NOINLINE
+static void
+flt_create_post_task(struct flt_priv *flt, flt_task_f *func,
+                     void *ud, size_t i, flt_migrate_f *migrate)
+{
+    struct flt_task  *task = cork_new(struct flt_task);
+    struct flt_task  *curr;
+    task->func = func;
+    task->ud = ud;
+    task->i = i;
+    task->migrate = migrate;
+    task->next = NULL;
+    for (curr = flt->pending; curr->next != NULL; curr = curr->next) {
+    }
+    curr->next = task;
+}
+
+static void
+flt_reuse_post_task(struct flt_priv *flt, flt_task_f *func,
+                    void *ud, size_t i, flt_migrate_f *migrate)
+{
+    struct flt_task  *task = flt->unused;
+    struct flt_task  *curr;
+    flt->unused = task->next;
+    task->func = func;
+    task->ud = ud;
+    task->i = i;
+    task->migrate = migrate;
+    task->next = NULL;
+    for (curr = flt->pending; curr->next != NULL; curr = curr->next) {
+    }
+    curr->next = task;
+}
+
+static void
+flt_new_post_task(struct flt_priv *flt, flt_task_f *func,
+                  void *ud, size_t i, flt_migrate_f *migrate)
+{
+    if (CORK_UNLIKELY(flt->unused == NULL)) {
+        flt_create_post_task(flt, func, ud, i, migrate);
+    } else {
+        flt_reuse_post_task(flt, func, ud, i, migrate);
+    }
+}
+
+void
+flt_add_post_step(struct flt *pflt, flt_task_f *func, void *ud, size_t i)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_new_post_task(flt, func, ud, i, flt_default_migrate);
+}
+
+void
+flt_add_post_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
+                        flt_migrate_f *migrate)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_new_post_task(flt, func, ud, i, migrate);
+}
+
+
+void
+flt_run_task(struct flt *pflt)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_task_deque_push_head(flt, flt->ready, flt->pending);
+}
+
+void
+flt_cancel_task(struct flt *pflt)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_release_task(flt, flt->pending);
+}
+
+struct flt_task *
+flt_defer_task(struct flt *pflt)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt->pending->creator = flt;
+    return flt->pending;
+}
+
+void
+flt_run_deferred_task(struct flt *pflt, struct flt_task *task)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    flt_task_deque_push_head(flt, flt->ready, task);
+    if (CORK_UNLIKELY(task->creator != flt)) {
+        flt_task_migrate(flt, task, task->creator);
+    }
+}
+
+
+/*-----------------------------------------------------------------------
+ * Execution contexts
+ */
 
 #if FLT_MEASURE_TIMING
 #define flt_start_stopwatch(flt)  flt_stopwatch_start(&(flt)->stopwatch)
@@ -290,13 +506,6 @@ flt_run_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
 #endif
 
 #define FLT_ROUND_SIZE  32
-
-static void
-flt_release_task(struct flt_priv *flt, struct flt_task *task)
-{
-    task->next = flt->unused;
-    flt->unused = task;
-}
 
 static void
 flt_pop_and_run_one(struct flt_priv *flt)
@@ -587,16 +796,22 @@ flt_new(struct flt_fleet *fleet, size_t index, size_t count)
 }
 
 static void
-flt_free(struct flt_priv *flt)
+flt_free_unused(struct flt_priv *flt)
 {
     struct flt_task  *curr;
     struct flt_task  *next;
-    flt_task_deque_free(flt, flt->ready);
-    flt_task_deque_free(flt, flt->migrating);
     for (curr = flt->unused; curr != NULL; curr = next) {
         next = curr->next;
         free(curr);
     }
+}
+
+static void
+flt_free(struct flt_priv *flt)
+{
+    flt_task_deque_free(flt, flt->ready);
+    flt_task_deque_free(flt, flt->migrating);
+    flt_free_unused(flt);
 #if FLT_DEBUG
     cork_buffer_done(&flt->debug);
 #endif

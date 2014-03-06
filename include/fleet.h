@@ -46,6 +46,45 @@ flt_run_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
 
 
 /*-----------------------------------------------------------------------
+ * Task steps
+ */
+
+void
+flt_start_task(struct flt *flt, flt_task_f *func, void *ud, size_t i);
+
+void
+flt_start_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
+                     flt_migrate_f *migrate);
+
+void
+flt_add_pre_step(struct flt *flt, flt_task_f *func, void *ud, size_t i);
+
+void
+flt_add_pre_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
+                       flt_migrate_f *migrate);
+
+void
+flt_add_post_step(struct flt *flt, flt_task_f *func, void *ud, size_t i);
+
+void
+flt_add_post_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
+                        flt_migrate_f *migrate);
+
+
+void
+flt_run_task(struct flt *flt);
+
+void
+flt_cancel_task(struct flt *flt);
+
+struct flt_task *
+flt_defer_task(struct flt *flt);
+
+void
+flt_run_deferred_task(struct flt *flt, struct flt_task *task);
+
+
+/*-----------------------------------------------------------------------
  * Fleets
  */
 
