@@ -49,6 +49,7 @@ set(LIBFLEET_SRC
     libfleet/after.c
     libfleet/fleet.c
     libfleet/local.c
+    libfleet/pool.c
     libfleet/scounter.c
 )
 

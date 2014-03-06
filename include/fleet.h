@@ -213,6 +213,49 @@ flt_after_ctx_add_step(struct flt *flt, struct flt_after_ctx *after_ctx);
 
 
 /*-----------------------------------------------------------------------
+ * Memory pools
+ */
+
+struct flt_pool;
+struct flt_pool_ctx;
+
+typedef void *
+flt_pool_init_f(struct flt *flt, void *ud, void *instance);
+
+typedef void
+flt_pool_done_f(struct flt *flt, void *ud, void *instance);
+
+struct flt_pool *
+flt_pool_new_size(struct flt *flt, size_t instance_size, void *ud,
+                  flt_pool_init_f *init,
+                  flt_pool_init_f *reuse,
+                  flt_pool_done_f *done);
+
+#define flt_pool_new(flt, type, ud, i, r, d) \
+    flt_pool_new_size((flt), sizeof(type), (ud), (i), (r), (d))
+
+void
+flt_pool_free(struct flt *flt, struct flt_pool *pool);
+
+struct flt_pool_ctx *
+flt_pool_get(struct flt *flt, struct flt_pool *pool);
+
+struct flt_pool_ctx *
+flt_pool_get_index(struct flt *flt, struct flt_pool *pool, unsigned int index);
+
+struct flt_pool_ctx *
+flt_pool_ctx_get_index(struct flt *flt, struct flt_pool_ctx *pool_ctx,
+                       unsigned int index);
+
+void *
+flt_pool_ctx_new_instance(struct flt *flt, struct flt_pool_ctx *pool_ctx);
+
+void
+flt_pool_ctx_free_instance(struct flt *flt, struct flt_pool_ctx *pool_ctx,
+                           void *instance);
+
+
+/*-----------------------------------------------------------------------
  * Semaphore counters
  */
 

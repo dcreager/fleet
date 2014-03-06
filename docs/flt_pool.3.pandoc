@@ -9,37 +9,49 @@ flt_pool -- Context-aware memory pools
 | **#include &lt;fleet.h&gt;**
 |
 | **struct flt_pool**;
+| **struct flt_pool_ctx**;
+|
+| typedef void \*
+| **flt_pool_init_f**(void \**ud*, void \**instance*);
 |
 | typedef void
-| (**flt_pool_init_f**)(void \**ud*, void \**instance*);
-|
-| typedef void
-| (**flt_pool_reuse_f**)(void \**ud*, void \**instance*);
-|
-| typedef void
-| (**flt_pool_done_f**)(void \**ud*, void \**instance*);
+| **flt_pool_done_f**(void \**ud*, void \**instance*);
 |
 | struct flt_pool \*
 | **flt_pool_new**(struct flt \**flt*, TYPE *type*, void \**ud*,
 |              flt_pool_init_f \**init*,
-|              flt_pool_reuse_f \**reuse*,
+|              flt_pool_init_f \**reuse*,
 |              flt_pool_done_f \**done*);
 |
 | struct flt_pool \*
 | **flt_pool_new_size**(struct flt \**flt*, size_t *instance_size*, void \**ud*,
 |                   flt_pool_init_f \**init*,
-|                   flt_pool_reuse_f \**reuse*,
+|                   flt_pool_init_f \**reuse*,
 |                   flt_pool_done_f \**done*);
 |
 | void
-| **flt_pool_free**(struct flt_pool \**data*);
+| **flt_pool_free**(struct flt_pool \**pool*);
+|
+| struct flt_pool_ctx \*
+| **flt_pool_get**(struct flt \**flt*, struct flt_pool \**pool*);
+|
+| struct flt_pool_ctx \*
+| **flt_pool_get_index**(struct flt \**flt*, struct flt_pool \**pool*,
+|                    unsigned int *index*);
+|
+| struct flt_pool_ctx \*
+| **flt_pool_ctx_get_index**(struct flt \**flt*,
+|                        struct flt_pool_ctx \**pool_ctx*,
+|                        unsigned int *index*);
 |
 | void \*
-| **flt_pool_new_instance**(struct flt_pool \**data*, struct flt \**flt*);
+| **flt_pool_ctx_new_instance**(struct flt \**flt*,
+|                           struct flt_pool_ctx \**pool_ctx*);
 |
 | void
-| **flt_pool_free_instance**(struct flt_pool \**data*, struct flt \**flt*,
-|                        void \**instance*);
+| **flt_pool_ctx_free_instance**(struct flt \**flt*,
+|                            struct flt_pool_ctx \**pool_ctx*,
+|                            void \**instance*);
 
 
 # DESCRIPTION
@@ -70,15 +82,24 @@ If the memory pool is shared among multiple tasks, you must ensure that only one
 of them frees it, and only does so when all of the other tasks are done using
 it.
 
-**flt_pool_new_instance**() returns a new instance of the data type managed by
-the memory pool.  This can only be called from within an executing task; you
-must pass in the **flt**(3) execution context that the task is running in.
+For efficiency reasons, each memory pool maintains some per-context state in
+several **flt_pool_ctx** instances.  You use these **flt_pool_ctx** handles, and
+not the pool itself, to allocate and deallocate instances of the underlying data
+instances.  **flt_pool_get**(), **flt_pool_get_index**(), and
+**flt_pool_ctx_get_index**() give you access to the per-context handles for the
+memory pool.
 
-**flt_pool_free_instance**() frees a data instance that was returned by a
-corresponding **flt_pool_new_instance**() call.  This can only be called from
-within an executing task; you must pass in the **flt**(3) execution context that
-the task is running in.  This does **not** have to be the same execution context
-that created the data instance; the memory pool will handle any necessary
+**flt_pool_ctx_new_instance**() returns a new instance of the data type managed
+by the memory pool.  This can only be called from within an executing task; you
+must pass in the **flt**(3) execution context that the task is running in, and
+the **flt_pool_ctx** handle that belongs to that context.
+
+**flt_pool_ctx_free_instance**() frees a data instance that was returned by a
+corresponding **flt_pool_ctx_new_instance**() call.  This can only be called
+from within an executing task; you must pass in the **flt**(3) execution context
+that the task is running in, and the **flt_pool_ctx** handle that belongs to
+that context.  This does **not** have to be the same execution context that
+created the data instance; the memory pool will handle any necessary
 synchronization.
 
 
@@ -94,6 +115,9 @@ initialization or finalization of each data instance.
     If you don't provide an *init* callback, the default is to fill the new
     instance with `0x00` bytes.
 
+    In addition to initializing the new instance, you must also return the
+    *instance* parameter as the callback's result.
+
 *reuse*
 
   : Called when an instance is reused; e.g., when an instance that was recently
@@ -102,6 +126,9 @@ initialization or finalization of each data instance.
     deallocated first.  You can use this callback to clear the contents of the
     existing instance.  If you don't provide a *reuse* callback, the default is
     to fill the new instance with `0x00` bytes.
+
+    In addition to initializing the new instance, you must also return the
+    *instance* parameter as the callback's result.
 
 *done*
 
@@ -114,5 +141,5 @@ initialization or finalization of each data instance.
 
 **flt_pool_new**() will always return a valid new memory pool.
 
-**flt_pool_new_instance**() will always return a valid new instance of the data
-type managed by the memory pool.
+**flt_pool_ctx_new_instance**() will always return a valid new instance of the
+data type managed by the memory pool.

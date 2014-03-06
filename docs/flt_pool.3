@@ -7,24 +7,22 @@ flt_pool \[en] Context\-aware memory pools
 \f[B]#include <fleet.h>\f[]
 .PP
 \f[B]struct flt_pool\f[];
+.PD 0
+.P
+.PD
+\f[B]struct flt_pool_ctx\f[];
+.PP
+typedef void *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_init_f\f[](void *\f[I]ud\f[], void *\f[I]instance\f[]);
 .PP
 typedef void
 .PD 0
 .P
 .PD
-(\f[B]flt_pool_init_f\f[])(void *\f[I]ud\f[], void *\f[I]instance\f[]);
-.PP
-typedef void
-.PD 0
-.P
-.PD
-(\f[B]flt_pool_reuse_f\f[])(void *\f[I]ud\f[], void *\f[I]instance\f[]);
-.PP
-typedef void
-.PD 0
-.P
-.PD
-(\f[B]flt_pool_done_f\f[])(void *\f[I]ud\f[], void *\f[I]instance\f[]);
+\f[B]flt_pool_done_f\f[](void *\f[I]ud\f[], void *\f[I]instance\f[]);
 .PP
 struct flt_pool *
 .PD 0
@@ -39,7 +37,7 @@ struct flt_pool *
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_reuse_f *\f[I]reuse\f[],
+\ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_init_f *\f[I]reuse\f[],
 .PD 0
 .P
 .PD
@@ -58,7 +56,7 @@ struct flt_pool *
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_reuse_f *\f[I]reuse\f[],
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_pool_init_f *\f[I]reuse\f[],
 .PD 0
 .P
 .PD
@@ -68,25 +66,68 @@ void
 .PD 0
 .P
 .PD
-\f[B]flt_pool_free\f[](struct flt_pool *\f[I]data\f[]);
+\f[B]flt_pool_free\f[](struct flt_pool *\f[I]pool\f[]);
+.PP
+struct flt_pool_ctx *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_get\f[](struct flt *\f[I]flt\f[], struct flt_pool
+*\f[I]pool\f[]);
+.PP
+struct flt_pool_ctx *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_get_index\f[](struct flt *\f[I]flt\f[], struct flt_pool
+*\f[I]pool\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int \f[I]index\f[]);
+.PP
+struct flt_pool_ctx *
+.PD 0
+.P
+.PD
+\f[B]flt_pool_ctx_get_index\f[](struct flt *\f[I]flt\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ struct flt_pool_ctx
+*\f[I]pool_ctx\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int
+\f[I]index\f[]);
 .PP
 void *
 .PD 0
 .P
 .PD
-\f[B]flt_pool_new_instance\f[](struct flt_pool *\f[I]data\f[], struct
-flt *\f[I]flt\f[]);
+\f[B]flt_pool_ctx_new_instance\f[](struct flt *\f[I]flt\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ struct flt_pool_ctx
+*\f[I]pool_ctx\f[]);
 .PP
 void
 .PD 0
 .P
 .PD
-\f[B]flt_pool_free_instance\f[](struct flt_pool *\f[I]data\f[], struct
-flt *\f[I]flt\f[],
+\f[B]flt_pool_ctx_free_instance\f[](struct flt *\f[I]flt\f[],
 .PD 0
 .P
 .PD
-\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]instance\f[]);
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ struct
+flt_pool_ctx *\f[I]pool_ctx\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void
+*\f[I]instance\f[]);
 .SH DESCRIPTION
 .PP
 The \f[B]flt_pool\f[] API is a memory pool implementation that is aware
@@ -120,15 +161,25 @@ If the memory pool is shared among multiple tasks, you must ensure that
 only one of them frees it, and only does so when all of the other tasks
 are done using it.
 .PP
-\f[B]flt_pool_new_instance\f[]() returns a new instance of the data type
-managed by the memory pool.
-This can only be called from within an executing task; you must pass in
-the \f[B]flt\f[](3) execution context that the task is running in.
+For efficiency reasons, each memory pool maintains some per\-context
+state in several \f[B]flt_pool_ctx\f[] instances.
+You use these \f[B]flt_pool_ctx\f[] handles, and not the pool itself, to
+allocate and deallocate instances of the underlying data instances.
+\f[B]flt_pool_get\f[](), \f[B]flt_pool_get_index\f[](), and
+\f[B]flt_pool_ctx_get_index\f[]() give you access to the per\-context
+handles for the memory pool.
 .PP
-\f[B]flt_pool_free_instance\f[]() frees a data instance that was
-returned by a corresponding \f[B]flt_pool_new_instance\f[]() call.
+\f[B]flt_pool_ctx_new_instance\f[]() returns a new instance of the data
+type managed by the memory pool.
 This can only be called from within an executing task; you must pass in
-the \f[B]flt\f[](3) execution context that the task is running in.
+the \f[B]flt\f[](3) execution context that the task is running in, and
+the \f[B]flt_pool_ctx\f[] handle that belongs to that context.
+.PP
+\f[B]flt_pool_ctx_free_instance\f[]() frees a data instance that was
+returned by a corresponding \f[B]flt_pool_ctx_new_instance\f[]() call.
+This can only be called from within an executing task; you must pass in
+the \f[B]flt\f[](3) execution context that the task is running in, and
+the \f[B]flt_pool_ctx\f[] handle that belongs to that context.
 This does \f[B]not\f[] have to be the same execution context that
 created the data instance; the memory pool will handle any necessary
 synchronization.
@@ -144,6 +195,9 @@ is appropriate to the data type.
 If you don't provide an \f[I]init\f[] callback, the default is to fill
 the new instance with \f[C]0x00\f[] bytes.
 .RS
+.PP
+In addition to initializing the new instance, you must also return the
+\f[I]instance\f[] parameter as the callback's result.
 .RE
 .TP
 .B \f[I]reuse\f[]
@@ -156,6 +210,9 @@ instance.
 If you don't provide a \f[I]reuse\f[] callback, the default is to fill
 the new instance with \f[C]0x00\f[] bytes.
 .RS
+.PP
+In addition to initializing the new instance, you must also return the
+\f[I]instance\f[] parameter as the callback's result.
 .RE
 .TP
 .B \f[I]done\f[]
@@ -171,5 +228,5 @@ finalization before freeing the instance.
 .PP
 \f[B]flt_pool_new\f[]() will always return a valid new memory pool.
 .PP
-\f[B]flt_pool_new_instance\f[]() will always return a valid new instance
-of the data type managed by the memory pool.
+\f[B]flt_pool_ctx_new_instance\f[]() will always return a valid new
+instance of the data type managed by the memory pool.
