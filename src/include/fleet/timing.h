@@ -10,8 +10,6 @@
 #ifndef FLEET_TIMING_H
 #define FLEET_TIMING_H
 
-#include <time.h>
-
 #include "libcork/core.h"
 
 
@@ -20,14 +18,45 @@
 #endif
 
 
+#if FLT_MEASURE_TIMING
+
+#if defined(__linux__)
+#include <time.h>
+
+#elif defined(__MACH__)
+#include <time.h>
+#include <sys/time.h>
+#include <mach/clock.h>
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+
+#else
+#error "Don't know how to calculate time on this platform!"
+#endif
+
 CORK_ATTR_UNUSED
 static uint64_t
 flt_get_time(void)
 {
+#if defined(__linux__)
     struct timespec  ts;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
     return (ts.tv_nsec / 1000) + (ts.tv_sec * 1000000);
+
+#elif defined(__MACH__)
+    static mach_timebase_info_data_t    timebase;
+    if (CORK_UNLIKELY(timebase.denom == 0)) {
+        (void) mach_timebase_info(&timebase);
+        timebase.denom *= 1000;
+    }
+
+    return mach_absolute_time() * timebase.numer / timebase.denom;
+
+#else
+#error "Don't know how to calculate time on this platform!"
+#endif
 }
+
 
 CORK_ATTR_UNUSED
 static void
@@ -59,6 +88,7 @@ flt_stopwatch_get_delta(struct flt_stopwatch *stopwatch)
     stopwatch->last = curr;
     return curr - last;
 }
+#endif
 
 
 #endif /* FLEET_TIMING_H */
