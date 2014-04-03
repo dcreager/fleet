@@ -467,8 +467,6 @@ flt_task_reschedule(struct flt *pflt, struct flt_task *ptask)
 #define flt_measure_time(flt, which)  /* do nothing */
 #endif
 
-#define FLT_ROUND_SIZE  32
-
 static void
 flt_pop_and_run_one(struct flt_priv *flt)
 {
@@ -586,15 +584,12 @@ flt_steal(struct flt_priv *flt)
     return success;
 }
 
+CORK_ATTR_NOINLINE
 static void
 flt_send_to_stealer(struct flt_priv *flt)
 {
     struct flt_priv  *waiting_to_steal = flt->waiting_to_steal;
 
-    /* Is anyone trying to steal from us? */
-    if (CORK_LIKELY(waiting_to_steal == NOBODY)) {
-        return;
-    }
     DEBUG(1, flt, "Context %u is stealing from us",
           waiting_to_steal->public.index);
 
@@ -635,7 +630,6 @@ static int
 flt__thread_run(struct cork_thread_body *body)
 {
     struct flt_priv  *flt = cork_container_of(body, struct flt_priv, body);
-    unsigned int  max_count;
 
     flt_start_stopwatch(flt);
     if (flt->active) {
@@ -647,18 +641,15 @@ flt__thread_run(struct cork_thread_body *body)
 start_round:
     /* If there is some other context waiting to steal from us, let them do
      * that before we execute anything else. */
-    flt_send_to_stealer(flt);
-    DEBUG(2, flt, "Start round");
-    max_count = FLT_ROUND_SIZE;
+    if (CORK_UNLIKELY(flt->waiting_to_steal != NOBODY)) {
+        flt_send_to_stealer(flt);
+    }
 
-continue_round:
     if (CORK_UNLIKELY(flt_task_deque_is_empty(flt, flt->ready))) {
         /* If we just drained the queue, then this context is no longer active.
          * Decrement the fleet's active context counter to see if we were the
          * last active context.  If so, then the whole fleet is done. */
         flt_measure_time(flt, executing);
-        DEBUG(0, flt, "Executed %zu in round",
-              (size_t) FLT_ROUND_SIZE - max_count);
         flt->active = false;
         if (CORK_UNLIKELY(flt_counter_dec(&flt->fleet->active_count))) {
             DEBUG(1, flt, "Last context has run out of tasks");
@@ -672,17 +663,8 @@ continue_round:
 
     /* We have at least one task in our queue to run. */
     flt_pop_and_run_one(flt);
-    if (--max_count == 0) {
-        /* We've executed the maximum number of tasks for this round, but there
-         * are other tasks in the queue.  Check to see if there's anyone who
-         * wants to steal from us, then start a new round. */
-        flt_measure_time(flt, executing);
-        DEBUG(2, flt, "Executed %zu in round", (size_t) FLT_ROUND_SIZE);
-        goto start_round;
-    } else {
-        /* We can keep executing tasks in this round. */
-        goto continue_round;
-    }
+    flt_measure_time(flt, executing);
+    goto start_round;
 
     /* Precondition: task empty */
 start_steal:
