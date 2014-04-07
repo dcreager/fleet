@@ -1,0 +1,55 @@
+% flt_after(3)
+
+# NAME
+
+flt_after -- Detecting when multiple tasks finish
+
+# SYNOPSIS
+
+| **#include &lt;fleet.h&gt;**
+|
+| **struct flt_after**;
+|
+| struct flt_after \*
+| **flt_after_new**(struct flt \**flt*);
+|
+| struct flt_after \*
+| **flt_after_get_index**(struct flt \**flt*, struct flt_after \**from_after*,
+|                     unsigned int *index*);
+|
+| void
+| **flt_after_set_trigger**(struct flt \**flt*, struct flt_after \**after*);
+|
+| void
+| **flt_after_track**(struct flt \**flt*, struct flt_after \**after*);
+
+
+# DESCRIPTION
+
+The **flt_after** API lets you keep track of when several tasks have all
+finished executing, regardless of how many threads and execution contexts are
+used to execute those tasks.  An after consists of a number of "tracked" tasks,
+and a single "trigger" task.  When all of the tracked tasks have finished
+executing, the trigger task is scheduled for execution.
+
+For each after, we maintain some per-context state, as well as some global
+state.  The global state is hidden; you access the after using an **flt_after**
+pointer, which refers to the per-context state for the given context.
+**flt_after_get_index**() returns the **flt_after** pointer that belongs to the
+context with the given integer index, given the **flt_after** pointer that
+belongs to *flt*.
+
+**flt_after_new**() creates a new after, and returns the **flt_after** instance
+for the current execution context.  The after initially doesn't contain any
+tracked tasks, and its trigger task is not set.  You must set the trigger task
+before adding any tracked tasks.  Note that you cannot explicitly free an after
+yourself; it is automatically freed when all of the tracked tasks finish.
+
+**flt_after_set_trigger**() sets the trigger task for an after, using the
+context's current incomplete task.  This function consumes the incomplete task.
+You must call this function before calling **flt_after_add_step**().
+
+**flt_after_track**() adds a new tracked task to the after, using the context's
+current incomplete task.  This function does *not* consume the incomplete task.
+(You'll usually schedule the incomplete task for execution using
+**flt_run_task**(3).)

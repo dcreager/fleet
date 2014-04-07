@@ -1,0 +1,78 @@
+.TH "flt_after" "3" "2014-01-01" "Fleet" "Fleet\ documentation"
+.SH NAME
+.PP
+flt_after \[en] Detecting when multiple tasks finish
+.SH SYNOPSIS
+.PP
+\f[B]#include <fleet.h>\f[]
+.PP
+\f[B]struct flt_after\f[];
+.PP
+struct flt_after *
+.PD 0
+.P
+.PD
+\f[B]flt_after_new\f[](struct flt *\f[I]flt\f[]);
+.PP
+struct flt_after *
+.PD 0
+.P
+.PD
+\f[B]flt_after_get_index\f[](struct flt *\f[I]flt\f[], struct flt_after
+*\f[I]from_after\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ unsigned int \f[I]index\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_after_set_trigger\f[](struct flt *\f[I]flt\f[], struct
+flt_after *\f[I]after\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_after_track\f[](struct flt *\f[I]flt\f[], struct flt_after
+*\f[I]after\f[]);
+.SH DESCRIPTION
+.PP
+The \f[B]flt_after\f[] API lets you keep track of when several tasks
+have all finished executing, regardless of how many threads and
+execution contexts are used to execute those tasks.
+An after consists of a number of \[lq]tracked\[rq] tasks, and a single
+\[lq]trigger\[rq] task.
+When all of the tracked tasks have finished executing, the trigger task
+is scheduled for execution.
+.PP
+For each after, we maintain some per\-context state, as well as some
+global state.
+The global state is hidden; you access the after using an
+\f[B]flt_after\f[] pointer, which refers to the per\-context state for
+the given context.
+\f[B]flt_after_get_index\f[]() returns the \f[B]flt_after\f[] pointer
+that belongs to the context with the given integer index, given the
+\f[B]flt_after\f[] pointer that belongs to \f[I]flt\f[].
+.PP
+\f[B]flt_after_new\f[]() creates a new after, and returns the
+\f[B]flt_after\f[] instance for the current execution context.
+The after initially doesn't contain any tracked tasks, and its trigger
+task is not set.
+You must set the trigger task before adding any tracked tasks.
+Note that you cannot explicitly free an after yourself; it is
+automatically freed when all of the tracked tasks finish.
+.PP
+\f[B]flt_after_set_trigger\f[]() sets the trigger task for an after,
+using the context's current incomplete task.
+This function consumes the incomplete task.
+You must call this function before calling
+\f[B]flt_after_add_step\f[]().
+.PP
+\f[B]flt_after_track\f[]() adds a new tracked task to the after, using
+the context's current incomplete task.
+This function does \f[I]not\f[] consume the incomplete task.
+(You'll usually schedule the incomplete task for execution using
+\f[B]flt_run_task\f[](3).)

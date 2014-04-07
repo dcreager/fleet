@@ -340,38 +340,26 @@ flt_local_get_shard(struct flt *flt, struct flt_local *local,
 
 
 /*-----------------------------------------------------------------------
- * Semaphore counters
+ * Afters
  */
 
-struct flt_scounter;
+struct flt_after;
+struct flt_after_shard;
 
-struct flt_scounter *
-flt_scounter_new(struct flt *flt);
+struct flt_after *
+flt_after_new(struct flt *flt, struct flt_task *trigger);
 
-struct flt_scounter_shard *
-flt_scounter_get(struct flt *flt, struct flt_scounter *counter,
-                 unsigned int index);
-
-void
-flt_scounter_inc(struct flt *flt, struct flt_scounter *counter);
-
-bool
-flt_scounter_dec(struct flt *flt, struct flt_scounter *counter);
+struct flt_after_shard *
+flt_after_get_shard(struct flt *flt, struct flt_after *after,
+                    unsigned int index);
 
 void
-flt_scounter_migrate(struct flt *from, struct flt *to,
-                     struct flt_scounter *counter);
+flt_after_track(struct flt *flt, struct flt_after *after,
+                struct flt_task *task);
 
 void
-flt_scounter_shard_inc(struct flt *flt, struct flt_scounter_shard *shard);
-
-/* Returns true if this decrements the counter to 0. */
-bool
-flt_scounter_shard_dec(struct flt *flt, struct flt_scounter_shard *shard);
-
-struct flt_scounter_shard *
-flt_scounter_shard_migrate(struct flt *from, struct flt *to,
-                           struct flt_scounter_shard *from_shard);
+flt_after_shard_track(struct flt *flt, struct flt_after_shard *shard,
+                      struct flt_task *task);
 
 
 #endif /* FLEET_H */

@@ -18,6 +18,7 @@ set(MAN_FOOTER "Fleet")
 
 set(MAN_PAGES
     flt.3
+    flt_after.3
     flt_channel.3
     flt_detach.3
     flt_fleet.3
