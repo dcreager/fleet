@@ -6,19 +6,30 @@ flt_run \[en] Scheduling tasks
 .PP
 \f[B]#include <fleet.h>\f[]
 .PP
-void
+typedef void
 .PD 0
 .P
 .PD
-\f[B]flt_run\f[](struct flt *\f[I]flt\f[], struct flt_task
-*\f[I]task\f[]);
+\f[B]flt_task_f\f[](struct flt *\f[I]flt\f[], void *\f[I]ud\f[], size_t
+\f[I]i\f[]);
+.PP
+typedef void *
+.PD 0
+.P
+.PD
+\f[B]flt_migrate_f\f[](struct flt *\f[I]from\f[], struct flt
+*\f[I]to\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], size_t \f[I]i\f[]);
 .PP
 void
 .PD 0
 .P
 .PD
-\f[B]flt_run_later\f[](struct flt *\f[I]flt\f[], struct flt_task
-*\f[I]task\f[]);
+\f[B]flt_run\f[](struct flt *\f[I]flt\f[], flt_task_f *\f[I]func\f[],
+void *\f[I]ud\f[], size_t \f[I]i\f[]);
 .PP
 void
 .PD 0
@@ -26,6 +37,22 @@ void
 .PD
 \f[B]flt_return_to\f[](struct flt *\f[I]flt\f[], flt_task
 *\f[I]task\f[], void *\f[I]ud\f[], size_t \f[I]i\f[]);
+.PP
+void
+.PD 0
+.P
+.PD
+\f[B]flt_run_migratable\f[](struct flt *\f[I]flt\f[], flt_task_f
+*\f[I]func\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ void *\f[I]ud\f[], size_t
+\f[I]i\f[],
+.PD 0
+.P
+.PD
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ flt_migrate_f *\f[I]migrate\f[]);
 .SH DESCRIPTION
 .PP
 The \f[B]flt_run\f[] family of functions let you schedule a new task to
@@ -39,16 +66,19 @@ already running task.
 (Use \f[B]flt_fleet_run\f[](3) to start the initial \[lq]root\[rq] task
 for a fleet.)
 .PP
+Each task is represented by a \[lq]task function\[rq], which is the
+block of code that will execute when the fleet decides that it's time to
+run the task, along with the \f[I]ud\f[] and \f[I]i\f[] parameters that
+will be passed into the task function.
+The task function's \f[I]ud\f[] and \f[I]i\f[] parameters are provided
+when you schedule a task.
+.PP
 \f[B]flt_run\f[]() is the simplest function.
 It gives you no control over when or where the new task is executed;
 however, this gives the underlying fleet the most flexibility in
 executing tasks in parallel.
 You should only use the more complex variants if you really need the
 extra constraints that they impose.
-.PP
-\f[B]flt_run_later\f[]() works just like \f[B]flt_run\f[](), but
-provides a hint to the scheduler that it should allow other existing
-tasks to run first.
 .PP
 \f[B]flt_return_to\f[]() is a more efficient version of
 \f[B]flt_run\f[]() that can only be used as the last statement of a
@@ -80,9 +110,20 @@ However, this is an optional optimization; like with \f[B]flt_run\f[](),
 we don't make any guarantees about when or where the child task will be
 executed.
 .PP
-(Note that with \f[B]flt_return_to\f[](), you do \f[B]not\f[] create an
-\f[B]flt_task\f[] instance before scheduling the new task; you provide
-the task function and parameters directly.)
+Note that \f[B]flt_return_to\f[]() does not necessary return control to
+the fleet scheduler before executing the next task.
+You should be careful not to use this funtion too often, since one of
+fleet's rules of thumbs is to not perform an unbounded amount of work
+before returning to the scheduler.
+.PP
+\f[B]flt_run_migratable\f[]() schedules a task along with a
+\f[I]migration function\f[].
+This lets you update the \f[I]ud\f[] parameter that will be passed into
+the task function if the fleet scheduler moves the task to some other
+execution context.
+This allows to make optimizing assumptions about the data that you pass
+into your task, while still having a fallback mechanism to transfer data
+between context threads safely.
 .PP
 For all of these functions, you must ensure that any \f[I]ud\f[] input
 parameters remain valid until the task has a chance to run.
@@ -93,8 +134,8 @@ Note that all of these functions are allowed to return before the newly
 scheduled child task starts to execute.
 There isn't any way for the parent task to wait for newly scheduled
 child tasks to start or complete.
-If you need to know when the child task completes, you must use a
-\f[B]flt_task_group\f[](3).
+If you need to know when the child task completes, you must use an
+\f[B]flt_scounter\f[](3).
 .SS Data sharing
 .PP
 We don't place any restrictions on which particular values you pass in
@@ -116,10 +157,9 @@ If one or more of the tasks need to \f[B]write\f[] to the shared data,
 the story is different.
 You must ensure that it's not possible for there to be any read/write or
 write/write conflicts.
-Fleet does not provide any portable thread synchronization primitives,
-so there are two ways you can accomplish this.
 .PP
-The first is to use \f[B]flt_return_to\f[]() to schedule a new task.
+One way to do this is to use \f[B]flt_return_to\f[]() to schedule a new
+task.
 This function must be the last statement the parent task executes, so
 it's safe for the parent to pass its \f[I]ud\f[] parameter (or some
 portion of it) on to the new child task: anything the parent does to the

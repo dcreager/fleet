@@ -8,15 +8,15 @@ flt_local -- Context-local storage
 
 | **#include &lt;fleet.h&gt;**
 |
-| **struct flt_local**;
+| typedef void
+| **flt_local_init_f**(struct flt \**flt*, void \**ud*, void \**instance*,
+|                  unsigned int *index*);
 |
 | typedef void
-| (**flt_local_init_f**)(struct flt \**flt*, void \**ud*, void \**instance*);
+| **flt_local_done_f**(struct flt \**flt*, void \**ud*, void \**instance*,
+|                  unsigned int *index*);
 |
-| typedef void
-| (**flt_local_done_f**)(struct flt \**flt*, void \**ud*, void \**instance*);
-|
-| struct flt_local \*
+| void \*
 | **flt_local_new**(struct flt \**flt*, TYPE *type*, void \**ud*,
 |               flt_local_init_f \**init_instance*,
 |               flt_local_done_f \**done_instance*);
@@ -24,18 +24,44 @@ flt_local -- Context-local storage
 | void
 | **flt_local_free**(struct flt \**flt*, struct flt_local \**local*);
 |
+| void
+| **flt_local_ctx_free**(struct flt \**flt*, void \**instance*);
+|
 | void \*
-| **flt_local_get**(struct flt \**flt*, struct flt_local \**local*, TYPE *type*);
+| **flt_local_get**(struct flt \**flt*, struct flt_local \**local*);
+|
+| void \*
+| **flt_local_get_index**(struct flt \**flt*, struct flt_local \**local*,
+|                     unsigned int *index*);
+|
+| void \*
+| **flt_local_ctx_get_index**(struct flt \**flt*, void \**instance*,
+|                         unsigned int *index*);
+|
+| void \*
+| **flt_local_ctx_migrate**(struct flt \**from*, struct flt \**to*,
+|                       void \**from_local*);
 |
 | typedef void
-| **flt_local_visit_f**(struct flt \**flt*, *type* \**instance*, ...);
+| **flt_local_visit_f**(struct flt \**flt*, unsigned int *index*,
+|                   *type* \**instance*, ...);
 |
 | void
-| **flt_local_visit**(struct flt \**flt*, struct flt_local \**local*,
-|                 TYPE *type*, flt_local_visit_f \**visitor*, *...*);
+| **flt_local_visit**(struct flt \**flt*, TYPE *type*,
+|                 struct flt_local \**local*,
+|                 flt_local_visit_f \**visitor*, *...*);
 |
-| **flt_local_foreach**(struct flt \**flt*, struct flt_local \**local*,
-|                   size_t &*i*, TYPE *type*, *type* &\**instance*)
+| void
+| **flt_local_ctx_visit**(struct flt \**flt*, TYPE *type*, void \**instance*,
+|                     flt_local_visit_f \**visitor*, *...*);
+|
+| **flt_local_foreach**(struct flt \**flt*, TYPE *type*,
+|                   struct flt_local \**local*,
+|                   size_t &*i*, *type* &\**instance*)
+|     STATEMENT
+|
+| **flt_local_ctx_foreach**(struct flt \**flt*, TYPE *type*, void \**instance*,
+|                       size_t &*i*, *type* &\**instance*)
 |     STATEMENT
 
 
@@ -49,62 +75,74 @@ callback functions that can allocate and deallocate an individual instance; the
 instances, and for providing the instance associated with a particular execution
 context.
 
-**flt_local_new**() creates a new **flt_local** manager, creating an instance of
-*type* for each execution context in the fleet.  This new manager will use
-*init_instance* and *done_instance* to initialize and finalize the data
-instances that it manages.  Your *init_instance* callback will be called exactly
-once for each execution context in the fleet.  Note that your initialization
-function is given a pointer to the **flt**(3) instance that it belongs to, in
-case you need to store this somewhere in your data structure.
+There are two ways to refer to a group of context-local data instances.  The
+**flt_local** functions take in an **flt_local** instance, which refers to the
+entire group of data instances.  The **flt_local_ctx** functions take in an
+*instance* pointer to the data instance that belongs to the *flt* execution
+context.
 
-**flt_local_free**() frees an **flt_local** manager, and any instances that it
-has created.  If the manager is shared among multiple tasks, you must ensure
-that only one of them frees it, and only does so when all of the other tasks are
-done using it.
+**flt_local_new**() creates a new instance of *type* for each context in the
+fleet, and returns an **flt_local** that manages those instances.  We will use
+*init_instance* and *done_instance* to initialize and finalize each of these
+data instances.  Your *init_instance* callback will be called exactly once for
+each execution context in the fleet.  Note that the **flt**(3) instance that is
+passed in to your initialization function is the one that creates the
+**flt_local** data instances.  It is *not* the context that owns the instance
+being initialized.
 
-**flt_local_get**() returns the data instance for a particular execution
-context.  The result will be a pointer to an instance of *type*, which must
-match the type passed in to the **flt_local_new**() constructor.
+**flt_local_free**() and **flt_local_ctx_free**() free all of the instances
+managed by this **flt_local**.  Note that both functions free the entire
+**flt_local**, along with *all* of the context-specific data instances.  You
+must call exactly one of these functions exactly once for each **flt_local**
+that you allocate.
 
-**flt_local_visit**() calls a *visitor* function once for each of the
-context-specific instances in the **flt_local** manager.  *type* must match the
-type passed in to the **flt_local_new**() constructor.  Any additional *...*
+**flt_local_get**() returns the data instance that belongs to *flt*.
+**flt_local_get_index**() and **flt_local_ctx_get_index**() return the data
+instance that belongs to the context with the given integer index.
+**flt_local_ctx_migrate**() takes in the data instance that belongs to the
+*from* context, and returns the data instance that belongs to the *to* context.
+
+**flt_local_visit**() and **flt_local_ctx_visit**() call a *visitor* function
+once for each of the context-specific instances.  *type* must match the type
+passed in to the **flt_local_new**() constructor.  Any additional *...*
 parameters will be passed as-is to the visitor function.  (You must currently
 pass in at least one additional *...* because of limitations of the C
 preprocessor.)  For instance, if your **flt_local** manager contains instances
 of `struct my_type`, you could visit those instances using:
 
     static void
-    visit(struct flt *flt, struct my_type *instance, size_t *count)
+    visit(struct flt *flt, unsigned int index,
+          struct my_type *instance, size_t *count)
     {
         (*count)++;
     }
 
     size_t  count = 0;
-    flt_local_visit(flt, local, struct my_type, visit, &count);
+    flt_local_visit(flt, struct my_type, local, visit, &count);
 
 
-**flt_local_foreach**() is a custom control structure that will execute a
-statement once for each context-specific instance.  *i* must be the name of a
-`size_t` variable that you've allocated.  *type* must match the type passed in
-to the **flt_local_new**() constructor.  *instance* must be the name of a
-pointer to this type, which you've allocated.  For instance:
+**flt_local_foreach**() and **flt_local_ctx_foreach**() are custom control
+structures that will execute a statement once for each context-specific
+instance.  *i* must be the name of a `size_t` variable that you've allocated.
+*type* must match the type passed in to the **flt_local_new**() constructor.
+*instance* must be the name of a pointer to this type, which you've allocated.
+For instance:
 
     size_t  i;
     struct my_type  *ctx;
-    flt_local_foreach(flt, local, i, struct my_type, ctx) {
+    flt_local_foreach(flt, struct my_type, local, i, ctx) {
         /* Within the block, `ctx` is one of the context-specific
          * instances, and `i` is its index. */
     }
 
-Both **flt_local_visit**() and **flt_local_foreach**() will cause the current
-task to access data that is technically owned by some other execution context;
-it is your responsibility to make sure this happens in a thread-safe manner.
-You will usually use this function in a cleanup task to “merge” partial results
-that were calculated in each execution context, using one of the
-**flt_task_group_run_after**(3) family of functions.
+All of these iteration functions will cause the current task to access data that
+is technically owned by some other execution context; it is your responsibility
+to make sure this happens in a thread-safe manner.  You will usually use this
+function in a cleanup task to “merge” partial results that were calculated in
+each execution context, using an **flt_scounter**(3) to make sure that the
+cleanup task doesn't execute until all of parent tasks have finished.
 
 
 # RETURN VALUES
 
-**flt_local_new**() will always return a valid new **flt_local** manager.
+**flt_local_new**() will always return a valid new **flt_local** instance.

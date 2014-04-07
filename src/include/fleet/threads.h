@@ -127,6 +127,14 @@ flt_write_barrier(void)
 
 
 /*-----------------------------------------------------------------------
+ * Atomic helpers
+ */
+
+#define flt_ptr_cas(ptr, oldv, newv) \
+    (cork_ptr_cas((ptr), (oldv), (newv)) == (oldv))
+
+
+/*-----------------------------------------------------------------------
  * Cache-line-padded integers
  */
 
