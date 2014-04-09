@@ -264,48 +264,53 @@ flt_dealloc_any(struct flt *flt, size_t size, void *ptr);
  * Context-local data
  */
 
-struct flt_local;
-
-typedef void
-flt_local_init_f(struct flt *flt, void *ud, void *instance, unsigned int index);
-
-typedef void
-flt_local_done_f(struct flt *flt, void *ud, void *instance, unsigned int index);
+struct flt_local {
+    void  *instances;
+};
 
 
 struct flt_local *
-flt_local_new_size(struct flt *flt, size_t instance_size, void *ud,
-                   flt_local_init_f *init_instance,
-                   flt_local_done_f *done_instance);
+flt_local_new_size(struct flt *flt, size_t instance_size);
 
-#define flt_local_new(flt, type, ud, init, done) \
-    flt_local_new_size((flt), sizeof(type), (ud), (init), (done))
+#define flt_local_new(flt, type) \
+    flt_local_new_size((flt), sizeof(type))
 
 void
 flt_local_free(struct flt *flt, struct flt_local *local);
 
-void
-flt_local_shard_free(struct flt *flt, void *instance);
+#define flt_local_get_shard_typed(flt, type, local, index) \
+    ((type *) \
+     ((char *) (local)->instances + \
+      (index) * flt_round_to_cache_line(sizeof(type))))
+
+#define flt_local_get_current_shard_typed(flt, type, local) \
+    flt_local_get_shard_typed(flt, type, local, (flt)->index)
+
+#define flt_local_shard_get_shard_typed(flt, type, shard, idx) \
+    ((type *) \
+     ((char *) (shard) + \
+      flt_round_to_cache_line(sizeof(type)) * \
+      (int) ((idx) - (flt)->index)))
+
+#define flt_local_shard_migrate_typed(from, type, from_shard, to) \
+    ((type *) \
+     ((char *) (from_shard) + \
+      flt_round_to_cache_line(sizeof(type)) * \
+      (int) ((to)->index - (from)->index)))
 
 
 void *
-flt_local_get(struct flt *flt, struct flt_local *local);
+flt_local_get_current_shard(struct flt *flt, struct flt_local *local);
 
 void *
-flt_local_get_index(struct flt *flt, struct flt_local *local,
+flt_local_get_shard(struct flt *flt, struct flt_local *local,
                     unsigned int index);
-
-void *
-flt_local_shard_get_index(struct flt *flt, void *instance, unsigned int index);
-
-void *
-flt_local_shard_migrate(struct flt *from, struct flt *to, void *from_instance);
 
 
 #define flt_local_foreach(flt, type, local, i, inst) \
-    for ((inst) = flt_local_get_index((flt), (local), (i) = 0); \
+    for ((inst) = flt_local_get_shard_typed((flt), type, (local), (i) = 0); \
          (i) < (flt)->count; \
-         (inst) = flt_local_get_index((flt), (local), ++(i))) \
+         (inst) = flt_local_get_shard_typed((flt), type, (local), ++(i))) \
 
 #define flt_local_visit(flt, type, local, visit, ...) \
     do { \
@@ -317,16 +322,18 @@ flt_local_shard_migrate(struct flt *from, struct flt *to, void *from_instance);
     } while (0)
 
 
-#define flt_local_shard_foreach(flt, type, this_inst, i, inst) \
-    for ((inst) = flt_local_shard_get_index((flt), (this_inst), (i) = 0); \
+#define flt_local_shard_foreach(flt, type, shard, i, inst) \
+    for ((inst) = flt_local_shard_get_shard_typed \
+            ((flt), type, (shard), (i) = 0); \
          (i) < (flt)->count; \
-         (inst) = flt_local_shard_get_index((flt), (this_inst), ++(i))) \
+         (inst) = flt_local_shard_get_shard_typed \
+            ((flt), type, (shard), ++(i))) \
 
-#define flt_local_shard_visit(flt, type, this_inst, visit, ...) \
+#define flt_local_shard_visit(flt, type, shard, visit, ...) \
     do { \
         unsigned int  __i; \
         type  *__instance; \
-        flt_local_shard_foreach(flt, type, this_inst, __i, __instance) { \
+        flt_local_shard_foreach(flt, type, shard, __i, __instance) { \
             (visit)((flt), __i, __instance, __VA_ARGS__); \
         } \
     } while (0)
@@ -347,6 +354,13 @@ flt_scounter_get(struct flt *flt, struct flt_scounter *counter,
 
 void
 flt_scounter_inc(struct flt *flt, struct flt_scounter *counter);
+
+bool
+flt_scounter_dec(struct flt *flt, struct flt_scounter *counter);
+
+void
+flt_scounter_migrate(struct flt *from, struct flt *to,
+                     struct flt_scounter *counter);
 
 void
 flt_scounter_shard_inc(struct flt *flt, struct flt_scounter_shard *shard);
