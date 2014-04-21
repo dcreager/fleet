@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 
 #define FLT_CACHE_LINE_SIZE  64
@@ -19,6 +20,59 @@
 #define flt_round_to_cache_line(sz) \
     (((sz) % FLT_CACHE_LINE_SIZE) == 0? (sz): \
      (((sz) / FLT_CACHE_LINE_SIZE) + 1) * FLT_CACHE_LINE_SIZE)
+
+
+/*-----------------------------------------------------------------------
+ * Compiler shenanigans
+ */
+
+/* Assume that __builtin_expect is available in any extant version of GCC.
+ * Update this test if we find out that's not the case. */
+#if defined(__GNUC__)
+
+#if !defined(FLT_HAVE_EXPECT)
+#define FLT_HAVE_EXPECT  1
+#endif
+
+#if !defined(FLT_HAVE_INLINE)
+#define FLT_HAVE_INLINE  1
+#endif
+
+#if !defined(FLT_HAVE_NOINLINE)
+#define FLT_HAVE_NOINLINE  1
+#endif
+
+#if !defined(FLT_HAVE_UNUSED)
+#define FLT_HAVE_UNUSED  1
+#endif
+
+#endif /* defined(__GCC__) */
+
+#if FLT_HAVE_EXPECT
+#define FLT_LIKELY(expr)    (__builtin_expect((expr), 1))
+#define FLT_UNLIKELY(expr)  (__builtin_expect((expr), 0))
+#else
+#define FLT_LIKELY(expr)    (expr)
+#define FLT_UNLIKELY(expr)  (expr)
+#endif
+
+#if FLT_HAVE_INLINE
+#define FLT_INLINE  inline
+#else
+#define FLT_INLINE
+#endif
+
+#if FLT_HAVE_NOINLINE
+#define FLT_NOINLINE  __attribute__((noinline))
+#else
+#define FLT_NOINLINE
+#endif
+
+#if FLT_HAVE_UNUSED
+#define FLT_UNUSED  __attribute__((unused))
+#else
+#define FLT_UNUSED
+#endif
 
 
 /*-----------------------------------------------------------------------
@@ -52,6 +106,11 @@ flt_run_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
 struct flt {
     unsigned int  index;
     unsigned int  count;
+    /* Memory allocators */
+    void  *unused8;
+    void  *unused64;
+    void  *unused256;
+    void  *unused1024;
 };
 
 struct flt_fleet;
@@ -68,6 +127,104 @@ flt_fleet_set_context_count(struct flt_fleet *fleet,
 
 void
 flt_fleet_run(struct flt_fleet *fleet, flt_task_f *func, void *ud, size_t i);
+
+
+/*-----------------------------------------------------------------------
+ * Memory allocation
+ */
+
+#define flt_define_allocator_functions(sz) \
+\
+FLT_UNUSED \
+static FLT_INLINE void * \
+flt_claim_##sz(struct flt *flt) \
+{ \
+    void  *result = flt->unused##sz; \
+    void  **next = result; \
+    flt->unused##sz = *next; \
+    return result; \
+} \
+\
+FLT_UNUSED \
+static FLT_INLINE void \
+flt_cancel_claim_##sz(struct flt *flt, void *ptr) \
+{ \
+    void  **next = ptr; \
+    *next = flt->unused##sz; \
+    flt->unused##sz = ptr; \
+} \
+\
+void * \
+flt_alloc_##sz(struct flt *flt, void *ptr); \
+\
+FLT_UNUSED \
+static FLT_INLINE void * \
+flt_finish_claim_##sz(struct flt *flt, void *ptr) \
+{ \
+    if (FLT_UNLIKELY(flt->unused##sz == NULL)) { \
+        return flt_alloc_##sz(flt, ptr); \
+    } else { \
+        return ptr; \
+    } \
+} \
+\
+FLT_UNUSED \
+static FLT_INLINE void \
+flt_release_##sz(struct flt *flt, void *ptr) \
+{ \
+    void  **next = ptr; \
+    *next = flt->unused##sz; \
+    flt->unused##sz = ptr; \
+}
+
+flt_define_allocator_functions(8);
+flt_define_allocator_functions(64);
+flt_define_allocator_functions(256);
+flt_define_allocator_functions(1024);
+
+#undef flt_define_allocator_functions
+
+void *
+flt_alloc_any(struct flt *flt, size_t size);
+
+void
+flt_dealloc_any(struct flt *flt, size_t size, void *ptr);
+
+
+#define flt_claim(flt, type) \
+    ((sizeof(type) <= 8)? flt_claim_8((flt)): \
+     (sizeof(type) <= 64)? flt_claim_64((flt)): \
+     (sizeof(type) <= 256)? flt_claim_256((flt)): \
+     (sizeof(type) <= 1024)? flt_claim_1024((flt)): \
+     flt_alloc_any((flt), sizeof(type)))
+
+#define flt_cancel_claim(flt, type, ptr) \
+    ((sizeof(type) <= 8)? flt_cancel_claim_8((flt), (ptr)): \
+     (sizeof(type) <= 64)? flt_cancel_claim_64((flt), (ptr)): \
+     (sizeof(type) <= 256)? flt_cancel_claim_256((flt), (ptr)): \
+     (sizeof(type) <= 1024)? flt_cancel_claim_1024((flt), (ptr)): \
+     flt_dealloc_any((flt), sizeof(type), (ptr)))
+
+#define flt_finish_claim(flt, type, ptr) \
+    ((sizeof(type) <= 8)? flt_finish_claim_8((flt), (ptr)): \
+     (sizeof(type) <= 64)? flt_finish_claim_64((flt), (ptr)): \
+     (sizeof(type) <= 256)? flt_finish_claim_256((flt), (ptr)): \
+     (sizeof(type) <= 1024)? flt_finish_claim_1024((flt), (ptr)): \
+     (ptr))
+
+#define flt_release(flt, type, ptr) \
+    ((sizeof(type) <= 8)? flt_release_8((flt), (ptr)): \
+     (sizeof(type) <= 64)? flt_release_64((flt), (ptr)): \
+     (sizeof(type) <= 256)? flt_release_256((flt), (ptr)): \
+     (sizeof(type) <= 1024)? flt_release_1024((flt), (ptr)): \
+     flt_dealloc_any((flt), sizeof(type), (ptr)))
+
+#define flt_unused(flt, type) \
+    ((sizeof(type) <= 8)? (flt)->unused8: \
+     (sizeof(type) <= 64)? (flt)->unused64: \
+     (sizeof(type) <= 256)? (flt)->unused256: \
+     (sizeof(type) <= 1024)? (flt)->unused1024: \
+     NULL)
 
 
 /*-----------------------------------------------------------------------

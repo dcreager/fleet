@@ -7,6 +7,7 @@
  * ----------------------------------------------------------------------
  */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "libcork/core.h"
@@ -54,7 +55,6 @@ struct flt_priv {
     struct cork_thread_body  body;
 
     bool  active;
-    struct flt_task  *unused;
     struct flt_task_deque  *ready;
     struct flt_task_deque  *migrating;
 
@@ -86,6 +86,63 @@ struct flt_fleet {
     struct flt_counter  active_count;
     struct cork_buffer  buf;
 };
+
+
+/*-----------------------------------------------------------------------
+ * Memory allocation
+ */
+
+void *
+flt_alloc_8(struct flt *pflt, void *ptr)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    void  **next = malloc(8);
+    *next = flt->public.unused8;
+    flt->public.unused8 = next;
+    return ptr;
+}
+
+void *
+flt_alloc_64(struct flt *pflt, void *ptr)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    void  **next = malloc(64);
+    *next = flt->public.unused64;
+    flt->public.unused64 = next;
+    return ptr;
+}
+
+void *
+flt_alloc_256(struct flt *pflt, void *ptr)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    void  **next = malloc(256);
+    *next = flt->public.unused256;
+    flt->public.unused256 = next;
+    return ptr;
+}
+
+void *
+flt_alloc_1024(struct flt *pflt, void *ptr)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    void  **next = malloc(1024);
+    *next = flt->public.unused1024;
+    flt->public.unused1024 = next;
+    return ptr;
+}
+
+void *
+flt_alloc_any(struct flt *pflt, size_t size)
+{
+    return malloc(size);
+}
+
+void
+flt_dealloc_any(struct flt *pflt, size_t size, void *ptr)
+{
+    free(ptr);
+}
 
 
 /*-----------------------------------------------------------------------
@@ -140,41 +197,13 @@ flt_task_deque_is_empty(struct flt_priv *flt,
     return deque->tasks == NULL;
 }
 
-CORK_ATTR_NOINLINE
-static struct flt_task *
-flt_task_deque_create_task(struct flt_priv *flt, struct flt_task_deque *deque)
-{
-    void  *vtask;
-    struct flt_task  *task;
-    posix_memalign(&vtask, 64, sizeof(struct flt_task));
-    task = vtask;
-    task->next = deque->tasks;
-    deque->tasks = task;
-    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          deque, func, ud, i);
-    return task;
-}
-
-static struct flt_task *
-flt_task_deque_reuse_task(struct flt_priv *flt, struct flt_task_deque *deque)
-{
-    struct flt_task  *task = flt->unused;
-    flt->unused = task->next;
-    task->next = deque->tasks;
-    deque->tasks = task;
-    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          deque, func, ud, i);
-    return task;
-}
-
 static struct flt_task *
 flt_task_deque_new_task(struct flt_priv *flt, struct flt_task_deque *deque)
 {
-    if (CORK_UNLIKELY(flt->unused == NULL)) {
-        return flt_task_deque_create_task(flt, deque);
-    } else {
-        return flt_task_deque_reuse_task(flt, deque);
-    }
+    struct flt_task  *task = flt_claim(&flt->public, struct flt_task);
+    task->next = deque->tasks;
+    deque->tasks = task;
+    return task;
 }
 
 static struct flt_task *
@@ -265,6 +294,9 @@ flt_run(struct flt *pflt, flt_task_f *func, void *ud, size_t i)
     task->ud = ud;
     task->i = i;
     task->migrate = flt_default_migrate;
+    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
+          flt->ready, func, ud, i);
+    flt_finish_claim(&flt->public, struct flt_task, task);
 }
 
 void
@@ -277,6 +309,9 @@ flt_run_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
     task->ud = ud;
     task->i = i;
     task->migrate = migrate;
+    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
+          flt->ready, func, ud, i);
+    flt_finish_claim(&flt->public, struct flt_task, task);
 }
 
 
@@ -294,8 +329,7 @@ flt_run_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
 static void
 flt_release_task(struct flt_priv *flt, struct flt_task *task)
 {
-    task->next = flt->unused;
-    flt->unused = task;
+    flt_release(&flt->public, struct flt_task, task);
 }
 
 static void
@@ -560,19 +594,29 @@ flt__thread_free(struct cork_thread_body *body)
     /* Nothing to do */
 }
 
+#define flt_alloc_initial(flt, sz) \
+    do { \
+        void  **next = malloc(sz); \
+        *next = NULL; \
+        flt->public.unused##sz = next; \
+    } while (0)
+
 static struct flt_priv *
 flt_new(struct flt_fleet *fleet, size_t index, size_t count)
 {
     struct flt_priv  *flt = cork_new(struct flt_priv);
     flt->public.index = index;
     flt->public.count = count;
+    flt_alloc_initial(flt, 8);
+    flt_alloc_initial(flt, 64);
+    flt_alloc_initial(flt, 256);
+    flt_alloc_initial(flt, 1024);
 #if FLT_DEBUG
     cork_buffer_init(&flt->debug);
 #endif
     flt->fleet = fleet;
     flt->ready = flt_task_deque_new(flt);
     flt->migrating = flt_task_deque_new(flt);
-    flt->unused = NULL;
     flt->body.run = flt__thread_run;
     flt->body.free = flt__thread_free;
     flt->next_to_steal_from = (index + 1) % count;
@@ -587,16 +631,25 @@ flt_new(struct flt_fleet *fleet, size_t index, size_t count)
 }
 
 static void
-flt_free(struct flt_priv *flt)
+flt_free_unused(struct flt_priv *flt, void **unused)
 {
-    struct flt_task  *curr;
-    struct flt_task  *next;
-    flt_task_deque_free(flt, flt->ready);
-    flt_task_deque_free(flt, flt->migrating);
-    for (curr = flt->unused; curr != NULL; curr = next) {
-        next = curr->next;
+    void  **curr;
+    void  **next;
+    for (curr = unused; curr != NULL; curr = next) {
+        next = *curr;
         free(curr);
     }
+}
+
+static void
+flt_free(struct flt_priv *flt)
+{
+    flt_task_deque_free(flt, flt->ready);
+    flt_task_deque_free(flt, flt->migrating);
+    flt_free_unused(flt, flt->public.unused8);
+    flt_free_unused(flt, flt->public.unused64);
+    flt_free_unused(flt, flt->public.unused256);
+    flt_free_unused(flt, flt->public.unused1024);
 #if FLT_DEBUG
     cork_buffer_done(&flt->debug);
 #endif
