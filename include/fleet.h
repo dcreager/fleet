@@ -83,20 +83,53 @@ struct flt;
 struct flt_task;
 
 typedef void
-flt_task_f(struct flt *flt, void *ud, size_t i);
+flt_task_run_f(struct flt *flt, struct flt_task *task);
+
+
+struct flt_task {
+    flt_task_run_f  *run;
+    void  *ud;
+    size_t  i;
+};
+
+struct flt_task *
+flt_task_new_unscheduled(struct flt *flt, flt_task_run_f *run,
+                         void *ud, size_t i);
+
+struct flt_task *
+flt_task_new_scheduled(struct flt *flt, flt_task_run_f *run,
+                       void *ud, size_t i);
+
+void
+flt_task_free(struct flt *flt, struct flt_task *task);
+
+void
+flt_task_schedule(struct flt *flt, struct flt_task *task);
+
+FLT_UNUSED
+static FLT_INLINE void
+flt_return_to(struct flt *flt, flt_task_run_f *run, void *ud, size_t i)
+{
+    struct flt_task  task = { run, ud, i };
+    return run(flt, &task);
+}
+
+
+typedef void
+flt_task_migrate_f(struct flt *from_ctx, struct flt *to_ctx,
+                   struct flt_task *task, void *ud);
+
+void
+flt_task_add_on_migrate(struct flt *flt, struct flt_task *task,
+                        flt_task_migrate_f *migrate, void *ud);
+
 
 typedef void *
-flt_migrate_f(struct flt *from_ctx, struct flt *to_ctx, void *ud, size_t i);
-
-
-void
-flt_run(struct flt *flt, flt_task_f *func, void *ud, size_t i);
+flt_task_finished_f(struct flt *flt, struct flt_task *task, void *ud);
 
 void
-flt_run_migratable(struct flt *flt, flt_task_f *func, void *ud, size_t i,
-                   flt_migrate_f *migrate);
-
-#define flt_return_to(flt, task, ud, i)  ((task)((flt), (ud), (i)))
+flt_task_add_on_finished(struct flt *flt, struct flt_task *task,
+                         flt_task_finished_f *finished, void *ud);
 
 
 /*-----------------------------------------------------------------------
@@ -126,7 +159,7 @@ flt_fleet_set_context_count(struct flt_fleet *fleet,
                             unsigned int context_count);
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task_f *func, void *ud, size_t i);
+flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run, void *ud, size_t i);
 
 
 /*-----------------------------------------------------------------------

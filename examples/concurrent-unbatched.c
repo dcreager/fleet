@@ -46,10 +46,10 @@ run_native(void)
     result = sum;
 }
 
-static flt_task_f  add_all;
+static flt_task_run_f  add_all;
 
 static void
-add_all(struct flt *flt, void *ud, size_t dummy)
+add_all(struct flt *flt, struct flt_task *task)
 {
     unsigned long  sum = 0;
     unsigned long  i;

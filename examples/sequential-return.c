@@ -46,15 +46,15 @@ run_native(void)
     result = sum;
 }
 
-static flt_task_f  add_one;
+static flt_task_run_f  add_one;
 
 static void
-add_one(struct flt *flt, void *ud, size_t i)
+add_one(struct flt *flt, struct flt_task *task)
 {
-    if (i < max) {
-        unsigned long  *result = ud;
-        *result += i;
-        return flt_return_to(flt, add_one, result, i+1);
+    if (task->i < max) {
+        unsigned long  *result = task->ud;
+        *result += task->i;
+        return flt_return_to(flt, add_one, result, task->i+1);
     }
 }
 

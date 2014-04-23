@@ -146,46 +146,190 @@ flt_dealloc_any(struct flt *pflt, size_t size, void *ptr)
 
 
 /*-----------------------------------------------------------------------
- * Tasks
+ * Tasks and task deques
  */
 
-struct flt_task {
-    struct flt_task  *next;
-    flt_task_f  *func;
+struct flt_task_migrate {
+    flt_task_migrate_f  *migrate;
     void  *ud;
-    size_t  i;
-    flt_migrate_f  *migrate;
+    struct flt_task_migrate  *next;
 };
 
-#define flt_task_run(flt, task) \
-    ((task)->func(&(flt)->public, (task)->ud, (task)->i))
+struct flt_task_finished {
+    flt_task_finished_f  *finished;
+    void  *ud;
+    struct flt_task_finished  *next;
+};
 
-#define flt_task_migrate(from_ctx, to_ctx, task) \
-    ((task)->migrate(&(from_ctx)->public, &(to_ctx)->public, \
-                     (task)->ud, (task)->i))
+struct flt_task_priv {
+    struct flt_task  public;
+    struct flt_task_priv  *next;
+    struct flt_task_migrate  *migrate;
+    struct flt_task_finished  *finished;
+};
 
 struct flt_task_deque {
-    struct flt_task  *tasks;
+    struct flt_task_priv  *head;
 };
+
+
+static struct flt_task_priv *
+flt_task_new(struct flt_priv *flt, flt_task_run_f *run, void *ud, size_t i)
+{
+    struct flt_task_priv  *task = flt_claim(&flt->public, struct flt_task_priv);
+    task->public.run = run;
+    task->public.ud = ud;
+    task->public.i = i;
+    task->migrate = NULL;
+    task->finished = NULL;
+    return task;
+}
+
+struct flt_task *
+flt_task_new_unscheduled(struct flt *pflt, flt_task_run_f *run,
+                         void *ud, size_t i)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task = flt_task_new(flt, run, ud, i);
+    task = flt_finish_claim(&flt->public, struct flt_task_priv, task);
+    return &task->public;
+}
+
+static void
+flt_task_free_migrate(struct flt_priv *flt, struct flt_task_priv *task)
+{
+    struct flt_task_migrate  *curr;
+    struct flt_task_migrate  *next;
+    for (curr = task->migrate; curr != NULL; curr = next) {
+        next = curr->next;
+        flt_release(&flt->public, struct flt_task_migrate, curr);
+    }
+}
+
+static void
+flt_task_free_finished(struct flt_priv *flt, struct flt_task_priv *task)
+{
+    struct flt_task_finished  *curr;
+    struct flt_task_finished  *next;
+    for (curr = task->finished; curr != NULL; curr = next) {
+        next = curr->next;
+        flt_release(&flt->public, struct flt_task_finished, curr);
+    }
+}
+
+static void
+flt_task_free_(struct flt_priv *flt, struct flt_task_priv *task)
+{
+    flt_task_free_migrate(flt, task);
+    flt_task_free_finished(flt, task);
+    flt_release(&flt->public, struct flt_task_priv, task);
+}
+
+void
+flt_task_free(struct flt *pflt, struct flt_task *ptask)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task =
+        cork_container_of(ptask, struct flt_task_priv, public);
+    flt_task_free_(flt, task);
+}
+
+
+static void
+flt_task_run(struct flt_priv *flt, struct flt_task_priv *task)
+{
+    task->public.run(&flt->public, &task->public);
+}
+
+CORK_ATTR_NOINLINE
+static void
+flt_task_migrate_(struct flt_priv *from, struct flt_priv *to,
+                  struct flt_task_priv *task)
+{
+    struct flt_task_migrate  *curr;
+    for (curr = task->migrate; curr != NULL; curr = curr->next) {
+        curr->migrate(&from->public, &to->public, &task->public, curr->ud);
+    }
+}
+
+static void
+flt_task_migrate(struct flt_priv *from, struct flt_priv *to,
+                 struct flt_task_priv *task)
+{
+    if (CORK_UNLIKELY(task->migrate != NULL)) {
+        flt_task_migrate_(from, to, task);
+    }
+}
+
+void
+flt_task_add_on_migrate(struct flt *pflt, struct flt_task *ptask,
+                         flt_task_migrate_f *migrate, void *ud)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task =
+        cork_container_of(ptask, struct flt_task_priv, public);
+    struct flt_task_migrate  *closure =
+        flt_claim(&flt->public, struct flt_task_migrate);
+    closure->next = task->migrate;
+    task->migrate = closure;
+    closure->migrate = migrate;
+    closure->ud = ud;
+    flt_finish_claim(&flt->public, struct flt_task_migrate, closure);
+}
+
+CORK_ATTR_NOINLINE
+static void
+flt_task_finished_(struct flt_priv *flt, struct flt_task_priv *task)
+{
+    struct flt_task_finished  *curr;
+    for (curr = task->finished; curr != NULL; curr = curr->next) {
+        curr->finished(&flt->public, &task->public, curr->ud);
+    }
+}
+
+static void
+flt_task_finished(struct flt_priv *flt, struct flt_task_priv *task)
+{
+    if (CORK_UNLIKELY(task->finished != NULL)) {
+        flt_task_finished_(flt, task);
+    }
+}
+
+void
+flt_task_add_on_finished(struct flt *pflt, struct flt_task *ptask,
+                         flt_task_finished_f *finished, void *ud)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task =
+        cork_container_of(ptask, struct flt_task_priv, public);
+    struct flt_task_finished  *closure =
+        flt_claim(&flt->public, struct flt_task_finished);
+    closure->next = task->finished;
+    task->finished = closure;
+    closure->finished = finished;
+    closure->ud = ud;
+    flt_finish_claim(&flt->public, struct flt_task_finished, closure);
+}
+
 
 static struct flt_task_deque *
 flt_task_deque_new(struct flt_priv *flt)
 {
     struct flt_task_deque  *deque = cork_new(struct flt_task_deque);
     DEBUG(3, flt, "New task queue %p", deque);
-    deque->tasks = NULL;
+    deque->head = NULL;
     return deque;
 }
 
 static void
 flt_task_deque_free(struct flt_priv *flt, struct flt_task_deque *deque)
 {
-    struct flt_task  *curr;
-    struct flt_task  *next;
+    struct flt_task_priv  *curr;
+    struct flt_task_priv  *next;
     DEBUG(3, flt, "Free task queue %p", deque);
-    for (curr = deque->tasks; curr != NULL; curr = next) {
+    for (curr = deque->head; curr != NULL; curr = next) {
         next = curr->next;
-        free(curr);
+        flt_task_free_(flt, curr);
     }
     free(deque);
 }
@@ -194,25 +338,26 @@ static bool
 flt_task_deque_is_empty(struct flt_priv *flt,
                         const struct flt_task_deque *deque)
 {
-    return deque->tasks == NULL;
+    return deque->head == NULL;
 }
 
-static struct flt_task *
-flt_task_deque_new_task(struct flt_priv *flt, struct flt_task_deque *deque)
+static void
+flt_task_deque_push_head(struct flt_priv *flt, struct flt_task_deque *deque,
+                         struct flt_task_priv *task)
 {
-    struct flt_task  *task = flt_claim(&flt->public, struct flt_task);
-    task->next = deque->tasks;
-    deque->tasks = task;
-    return task;
+    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
+          deque, task->public.run, task->public.ud, task->public.i);
+    task->next = deque->head;
+    deque->head = task;
 }
 
-static struct flt_task *
+static struct flt_task_priv *
 flt_task_deque_pop_head(struct flt_priv *flt, struct flt_task_deque *deque)
 {
-    struct flt_task  *task = deque->tasks;
-    deque->tasks = task->next;
+    struct flt_task_priv  *task = deque->head;
+    deque->head = task->next;
     DEBUG(3, flt, "Popped task from %p is %p(%p,%zu)",
-          deque, task->func, task->ud, task->i);
+          deque, task->public.run, task->public.ud, task->public.i);
     return task;
 }
 
@@ -223,9 +368,9 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
 {
     size_t  steal_count = 0;
     size_t  skip_count = 0;
-    struct flt_task  *curr;
-    struct flt_task  *last_to_stay;
-    struct flt_task  *first_to_steal;
+    struct flt_task_priv  *curr;
+    struct flt_task_priv  *last_to_stay;
+    struct flt_task_priv  *first_to_steal;
 
     /* First walk through the list, counting how many tasks should be skipped
      * and how many should be stolen.  For every two tasks that we walk through,
@@ -234,7 +379,7 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
      * and that `last_to_stay` points to the task immediately before it, giving
      * us the dividing point between the tasks that stay and the tasks that
      * leave. */
-    curr = from->tasks;
+    curr = from->head;
     last_to_stay = NULL;
     first_to_steal = curr;
     while (curr != NULL) {
@@ -255,10 +400,10 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
     /* Once we fall through, `first_to_steal` and `last_to_stay` should be set
      * correctly.  We know that to->tasks is currently NULL, since we can only
      * steal into an empty deque. */
-    to->tasks = first_to_steal;
+    to->head = first_to_steal;
     if (last_to_stay == NULL) {
         /* The entire list should move. */
-        from->tasks = NULL;
+        from->head = NULL;
     } else {
         last_to_stay->next = NULL;
     }
@@ -266,54 +411,37 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
     /* Lastly we have to step through all of the just-stolen tasks and call
      * their `migrate` callbacks, to let them update their `ud` parameters. */
     for (curr = first_to_steal; curr != NULL; curr = curr->next) {
-        DEBUG(3, from_ctx,
-              "Migrate task %p(%p,%zu) from %p to %p",
-              curr->func, curr->ud, curr->i, from, to);
-        curr->ud = flt_task_migrate(from_ctx, to_ctx, curr);
+        DEBUG(3, from_ctx, "Migrate task %p(%p,%zu) from %p to %p",
+              curr->public.run, curr->public.ud, curr->public.i, from, to);
+        flt_task_migrate(from_ctx, to_ctx, curr);
     }
+}
+
+
+struct flt_task *
+flt_task_new_scheduled(struct flt *pflt, flt_task_run_f *run,
+                       void *ud, size_t i)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task = flt_task_new(flt, run, ud, i);
+    flt_task_deque_push_head(flt, flt->ready, task);
+    task = flt_finish_claim(&flt->public, struct flt_task_priv, task);
+    return &task->public;
+}
+
+void
+flt_task_schedule(struct flt *pflt, struct flt_task *ptask)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task =
+        cork_container_of(ptask, struct flt_task_priv, public);
+    flt_task_deque_push_head(flt, flt->ready, task);
 }
 
 
 /*-----------------------------------------------------------------------
  * Execution contexts
  */
-
-static void *
-flt_default_migrate(struct flt *from_ctx, struct flt *to_ctx,
-                    void *ud, size_t i)
-{
-    return ud;
-}
-
-void
-flt_run(struct flt *pflt, flt_task_f *func, void *ud, size_t i)
-{
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task  *task = flt_task_deque_new_task(flt, flt->ready);
-    task->func = func;
-    task->ud = ud;
-    task->i = i;
-    task->migrate = flt_default_migrate;
-    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          flt->ready, func, ud, i);
-    flt_finish_claim(&flt->public, struct flt_task, task);
-}
-
-void
-flt_run_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
-                   flt_migrate_f *migrate)
-{
-    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task  *task = flt_task_deque_new_task(flt, flt->ready);
-    task->func = func;
-    task->ud = ud;
-    task->i = i;
-    task->migrate = migrate;
-    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          flt->ready, func, ud, i);
-    flt_finish_claim(&flt->public, struct flt_task, task);
-}
-
 
 #if FLT_MEASURE_TIMING
 #define flt_start_stopwatch(flt)  flt_stopwatch_start(&(flt)->stopwatch)
@@ -327,18 +455,14 @@ flt_run_migratable(struct flt *pflt, flt_task_f *func, void *ud, size_t i,
 #define FLT_ROUND_SIZE  32
 
 static void
-flt_release_task(struct flt_priv *flt, struct flt_task *task)
-{
-    flt_release(&flt->public, struct flt_task, task);
-}
-
-static void
 flt_pop_and_run_one(struct flt_priv *flt)
 {
-    struct flt_task  *task = flt_task_deque_pop_head(flt, flt->ready);
-    DEBUG(3, flt, "Run task %p(%p,%zu)", task->func, task->ud, task->i);
+    struct flt_task_priv  *task = flt_task_deque_pop_head(flt, flt->ready);
+    DEBUG(3, flt, "Run task %p(%p,%zu)",
+          task->public.run, task->public.ud, task->public.i);
     flt_task_run(flt, task);
-    flt_release_task(flt, task);
+    flt_task_finished(flt, task);
+    flt_task_free_(flt, task);
 }
 
 static unsigned int
@@ -711,7 +835,8 @@ flt_fleet_set_context_count(struct flt_fleet *fleet, unsigned int context_count)
 }
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task_f *func, void *ud, size_t index)
+flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run,
+              void *ud, size_t index)
 {
     struct flt_priv  *flt;
     unsigned int  i;
@@ -721,7 +846,7 @@ flt_fleet_run(struct flt_fleet *fleet, flt_task_f *func, void *ud, size_t index)
     }
 
     flt = fleet->contexts[0];
-    flt_run(&flt->public, func, ud, index);
+    flt_task_new_scheduled(&flt->public, run, ud, index);
     flt->active = true;
     flt_counter_set(&fleet->active_count, 1);
 
