@@ -54,7 +54,8 @@ add_one(struct flt *flt, struct flt_task *task)
     if (task->i < max) {
         unsigned long  *result = task->ud;
         *result += task->i;
-        flt_task_new_scheduled(flt, add_one, result, task->i+1);
+        task->i++;
+        flt_task_reschedule(flt, task);
     }
 }
 

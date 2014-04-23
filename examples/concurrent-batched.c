@@ -104,14 +104,12 @@ schedule_one(struct flt *flt, struct flt_task *task)
     if (j > max) {
         j = max;
     } else {
-        struct flt_task  *task;
         flt_scounter_ctx_inc(flt, ctx->counter_ctx);
-        task = flt_task_new_scheduled(flt, schedule_one, ctx, j);
-        flt_task_add_on_migrate(flt, task, add_ctx__migrate, NULL);
+        task->i = j;
+        flt_task_reschedule(flt, task);
     }
 
     for (; i < j; i++) {
-        struct flt_task  *task;
         flt_scounter_ctx_inc(flt, ctx->counter_ctx);
         task = flt_task_new_scheduled(flt, add_one, ctx, i);
         flt_task_add_on_migrate(flt, task, add_ctx__migrate, NULL);

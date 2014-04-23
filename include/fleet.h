@@ -106,6 +106,9 @@ flt_task_free(struct flt *flt, struct flt_task *task);
 void
 flt_task_schedule(struct flt *flt, struct flt_task *task);
 
+void
+flt_task_reschedule(struct flt *flt, struct flt_task *task);
+
 FLT_UNUSED
 static FLT_INLINE void
 flt_return_to(struct flt *flt, flt_task_run_f *run, void *ud, size_t i)

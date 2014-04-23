@@ -149,6 +149,12 @@ flt_dealloc_any(struct flt *pflt, size_t size, void *ptr)
  * Tasks and task deques
  */
 
+enum flt_task_state {
+    FLT_TASK_CREATED,
+    FLT_TASK_SCHEDULED,
+    FLT_TASK_RUNNING
+};
+
 struct flt_task_migrate {
     flt_task_migrate_f  *migrate;
     void  *ud;
@@ -166,6 +172,7 @@ struct flt_task_priv {
     struct flt_task_priv  *next;
     struct flt_task_migrate  *migrate;
     struct flt_task_finished  *finished;
+    enum flt_task_state  state;
 };
 
 struct flt_task_deque {
@@ -191,6 +198,7 @@ flt_task_new_unscheduled(struct flt *pflt, flt_task_run_f *run,
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
     struct flt_task_priv  *task = flt_task_new(flt, run, ud, i);
+    task->state = FLT_TASK_CREATED;
     task = flt_finish_claim(&flt->public, struct flt_task_priv, task);
     return &task->public;
 }
@@ -347,6 +355,7 @@ flt_task_deque_push_head(struct flt_priv *flt, struct flt_task_deque *deque,
 {
     DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
           deque, task->public.run, task->public.ud, task->public.i);
+    task->state = FLT_TASK_SCHEDULED;
     task->next = deque->head;
     deque->head = task;
 }
@@ -438,6 +447,15 @@ flt_task_schedule(struct flt *pflt, struct flt_task *ptask)
     flt_task_deque_push_head(flt, flt->ready, task);
 }
 
+void
+flt_task_reschedule(struct flt *pflt, struct flt_task *ptask)
+{
+    struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
+    struct flt_task_priv  *task =
+        cork_container_of(ptask, struct flt_task_priv, public);
+    flt_task_deque_push_head(flt, flt->ready, task);
+}
+
 
 /*-----------------------------------------------------------------------
  * Execution contexts
@@ -460,9 +478,12 @@ flt_pop_and_run_one(struct flt_priv *flt)
     struct flt_task_priv  *task = flt_task_deque_pop_head(flt, flt->ready);
     DEBUG(3, flt, "Run task %p(%p,%zu)",
           task->public.run, task->public.ud, task->public.i);
+    task->state = FLT_TASK_RUNNING;
     flt_task_run(flt, task);
-    flt_task_finished(flt, task);
-    flt_task_free_(flt, task);
+    if (CORK_LIKELY(task->state == FLT_TASK_RUNNING)) {
+        flt_task_finished(flt, task);
+        flt_task_free_(flt, task);
+    }
 }
 
 static unsigned int
