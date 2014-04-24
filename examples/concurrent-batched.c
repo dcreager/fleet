@@ -54,7 +54,7 @@ static flt_task_run_f  schedule_one;
 static flt_task_run_f  schedule;
 
 struct add_shard {
-    struct flt_scounter_ctx  *counter_ctx;
+    struct flt_scounter_shard  *counter_shard;
     unsigned long  result;
 };
 
@@ -69,8 +69,8 @@ add_shard__migrate(struct flt *from, struct flt *to,
 {
     struct add_state  *from_state = task->ud;
     struct add_shard  *from_shard = from_state->shard;
-    flt_scounter_ctx_migrate(from, to, from_shard->counter_ctx);
-    from_state->shard = flt_local_ctx_migrate(from, to, from_shard);
+    flt_scounter_shard_migrate(from, to, from_shard->counter_shard);
+    from_state->shard = flt_local_shard_migrate(from, to, from_shard);
 }
 
 
@@ -85,8 +85,8 @@ static void
 merge_batches(struct flt *flt, struct flt_task *task)
 {
     struct add_state  *shard = task->ud;
-    flt_local_ctx_visit(flt, struct add_shard, shard, merge_one_batch, 0);
-    flt_local_ctx_free(flt, shard);
+    flt_local_shard_visit(flt, struct add_shard, shard, merge_one_batch, 0);
+    flt_local_shard_free(flt, shard);
 }
 
 static void
@@ -96,7 +96,7 @@ add_one(struct flt *flt, struct flt_task *task)
     struct add_shard  *shard = state->shard;
     unsigned long  i = state->i;
     shard->result += i;
-    if (flt_scounter_ctx_dec(flt, shard->counter_ctx)) {
+    if (flt_scounter_shard_dec(flt, shard->counter_shard)) {
         flt_task_new_scheduled(flt, merge_batches, shard);
     }
 }
@@ -118,14 +118,14 @@ schedule_one(struct flt *flt, struct flt_task *task)
     if (j > max) {
         j = max;
     } else {
-        flt_scounter_ctx_inc(flt, shard->counter_ctx);
+        flt_scounter_shard_inc(flt, shard->counter_shard);
         state->i = j;
         flt_task_reschedule(flt, task);
     }
 
     for (; i < j; i++) {
         struct add_state  *new_state;
-        flt_scounter_ctx_inc(flt, shard->counter_ctx);
+        flt_scounter_shard_inc(flt, shard->counter_shard);
         new_state = flt_claim(flt, struct add_state);
         new_state->shard = shard;
         new_state->i = i;
@@ -135,7 +135,7 @@ schedule_one(struct flt *flt, struct flt_task *task)
         flt_task_add_on_finished(flt, task, add_state__finish, NULL);
     }
 
-    if (flt_scounter_ctx_dec(flt, shard->counter_ctx)) {
+    if (flt_scounter_shard_dec(flt, shard->counter_shard)) {
         flt_task_new_scheduled(flt, merge_batches, shard);
     }
 }
@@ -145,7 +145,7 @@ add_shard__init(struct flt *flt, void *ud, void *vinstance, unsigned int index)
 {
     struct flt_scounter  *counter = ud;
     struct add_shard  *shard = vinstance;
-    shard->counter_ctx = flt_scounter_get(flt, counter, index);
+    shard->counter_shard = flt_scounter_get(flt, counter, index);
     shard->result = 0;
 }
 

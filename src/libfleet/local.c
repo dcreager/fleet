@@ -104,7 +104,7 @@ flt_local_free(struct flt *flt, struct flt_local *local)
 }
 
 void
-flt_local_ctx_free(struct flt *flt, void *instance)
+flt_local_shard_free(struct flt *flt, void *instance)
 {
     char  *element = ((char *) instance) - PADDED_HEADER_SIZE;
     struct flt_local  *local = (struct flt_local *) element;
@@ -131,7 +131,7 @@ flt_local_get_index(struct flt *flt, struct flt_local *local,
 }
 
 void *
-flt_local_ctx_get_index(struct flt *flt, void *instance, unsigned int index)
+flt_local_shard_get_index(struct flt *flt, void *instance, unsigned int index)
 {
     char  *element = ((char *) instance) - PADDED_HEADER_SIZE;
     struct flt_local  *local = (struct flt_local *) element;
@@ -141,7 +141,7 @@ flt_local_ctx_get_index(struct flt *flt, void *instance, unsigned int index)
 }
 
 void *
-flt_local_ctx_migrate(struct flt *from, struct flt *to, void *from_instance)
+flt_local_shard_migrate(struct flt *from, struct flt *to, void *from_instance)
 {
     char  *element = ((char *) from_instance) - PADDED_HEADER_SIZE;
     struct flt_local  *local = (struct flt_local *) element;

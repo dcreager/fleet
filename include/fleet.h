@@ -285,7 +285,7 @@ void
 flt_local_free(struct flt *flt, struct flt_local *local);
 
 void
-flt_local_ctx_free(struct flt *flt, void *instance);
+flt_local_shard_free(struct flt *flt, void *instance);
 
 
 void *
@@ -296,10 +296,10 @@ flt_local_get_index(struct flt *flt, struct flt_local *local,
                     unsigned int index);
 
 void *
-flt_local_ctx_get_index(struct flt *flt, void *instance, unsigned int index);
+flt_local_shard_get_index(struct flt *flt, void *instance, unsigned int index);
 
 void *
-flt_local_ctx_migrate(struct flt *from, struct flt *to, void *from_instance);
+flt_local_shard_migrate(struct flt *from, struct flt *to, void *from_instance);
 
 
 #define flt_local_foreach(flt, type, local, i, inst) \
@@ -317,16 +317,16 @@ flt_local_ctx_migrate(struct flt *from, struct flt *to, void *from_instance);
     } while (0)
 
 
-#define flt_local_ctx_foreach(flt, type, this_inst, i, inst) \
-    for ((inst) = flt_local_ctx_get_index((flt), (this_inst), (i) = 0); \
+#define flt_local_shard_foreach(flt, type, this_inst, i, inst) \
+    for ((inst) = flt_local_shard_get_index((flt), (this_inst), (i) = 0); \
          (i) < (flt)->count; \
-         (inst) = flt_local_ctx_get_index((flt), (this_inst), ++(i))) \
+         (inst) = flt_local_shard_get_index((flt), (this_inst), ++(i))) \
 
-#define flt_local_ctx_visit(flt, type, this_inst, visit, ...) \
+#define flt_local_shard_visit(flt, type, this_inst, visit, ...) \
     do { \
         unsigned int  __i; \
         type  *__instance; \
-        flt_local_ctx_foreach(flt, type, this_inst, __i, __instance) { \
+        flt_local_shard_foreach(flt, type, this_inst, __i, __instance) { \
             (visit)((flt), __i, __instance, __VA_ARGS__); \
         } \
     } while (0)
@@ -341,7 +341,7 @@ struct flt_scounter;
 struct flt_scounter *
 flt_scounter_new(struct flt *flt);
 
-struct flt_scounter_ctx *
+struct flt_scounter_shard *
 flt_scounter_get(struct flt *flt, struct flt_scounter *counter,
                  unsigned int index);
 
@@ -349,15 +349,15 @@ void
 flt_scounter_inc(struct flt *flt, struct flt_scounter *counter);
 
 void
-flt_scounter_ctx_inc(struct flt *flt, struct flt_scounter_ctx *counter_ctx);
+flt_scounter_shard_inc(struct flt *flt, struct flt_scounter_shard *shard);
 
 /* Returns true if this decrements the counter to 0. */
 bool
-flt_scounter_ctx_dec(struct flt *flt, struct flt_scounter_ctx *counter_ctx);
+flt_scounter_shard_dec(struct flt *flt, struct flt_scounter_shard *shard);
 
-struct flt_scounter_ctx *
-flt_scounter_ctx_migrate(struct flt *from, struct flt *to,
-                         struct flt_scounter_ctx *counter_ctx);
+struct flt_scounter_shard *
+flt_scounter_shard_migrate(struct flt *from, struct flt *to,
+                           struct flt_scounter_shard *from_shard);
 
 
 #endif /* FLEET_H */
