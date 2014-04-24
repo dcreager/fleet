@@ -63,7 +63,7 @@ static void
 run_in_fleet(struct flt_fleet *fleet)
 {
     result = 0;
-    flt_fleet_run(fleet, add_all, NULL, min);
+    flt_fleet_run(fleet, add_all, NULL);
 }
 
 static int

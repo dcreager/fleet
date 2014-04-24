@@ -181,23 +181,21 @@ struct flt_task_deque {
 
 
 static struct flt_task_priv *
-flt_task_new(struct flt_priv *flt, flt_task_run_f *run, void *ud, size_t i)
+flt_task_new(struct flt_priv *flt, flt_task_run_f *run, void *ud)
 {
     struct flt_task_priv  *task = flt_claim(&flt->public, struct flt_task_priv);
     task->public.run = run;
     task->public.ud = ud;
-    task->public.i = i;
     task->migrate = NULL;
     task->finished = NULL;
     return task;
 }
 
 struct flt_task *
-flt_task_new_unscheduled(struct flt *pflt, flt_task_run_f *run,
-                         void *ud, size_t i)
+flt_task_new_unscheduled(struct flt *pflt, flt_task_run_f *run, void *ud)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task_priv  *task = flt_task_new(flt, run, ud, i);
+    struct flt_task_priv  *task = flt_task_new(flt, run, ud);
     task->state = FLT_TASK_CREATED;
     task = flt_finish_claim(&flt->public, struct flt_task_priv, task);
     return &task->public;
@@ -353,8 +351,8 @@ static void
 flt_task_deque_push_head(struct flt_priv *flt, struct flt_task_deque *deque,
                          struct flt_task_priv *task)
 {
-    DEBUG(3, flt, "New task in %p is %p(%p,%zu)",
-          deque, task->public.run, task->public.ud, task->public.i);
+    DEBUG(3, flt, "New task in %p is %p(%p)",
+          deque, task->public.run, task->public.ud);
     task->state = FLT_TASK_SCHEDULED;
     task->next = deque->head;
     deque->head = task;
@@ -365,8 +363,8 @@ flt_task_deque_pop_head(struct flt_priv *flt, struct flt_task_deque *deque)
 {
     struct flt_task_priv  *task = deque->head;
     deque->head = task->next;
-    DEBUG(3, flt, "Popped task from %p is %p(%p,%zu)",
-          deque, task->public.run, task->public.ud, task->public.i);
+    DEBUG(3, flt, "Popped task from %p is %p(%p)",
+          deque, task->public.run, task->public.ud);
     return task;
 }
 
@@ -420,19 +418,18 @@ flt_task_deque_migrate(struct flt_priv *from_ctx, struct flt_priv *to_ctx,
     /* Lastly we have to step through all of the just-stolen tasks and call
      * their `migrate` callbacks, to let them update their `ud` parameters. */
     for (curr = first_to_steal; curr != NULL; curr = curr->next) {
-        DEBUG(3, from_ctx, "Migrate task %p(%p,%zu) from %p to %p",
-              curr->public.run, curr->public.ud, curr->public.i, from, to);
+        DEBUG(3, from_ctx, "Migrate task %p(%p) from %p to %p",
+              curr->public.run, curr->public.ud, from, to);
         flt_task_migrate(from_ctx, to_ctx, curr);
     }
 }
 
 
 struct flt_task *
-flt_task_new_scheduled(struct flt *pflt, flt_task_run_f *run,
-                       void *ud, size_t i)
+flt_task_new_scheduled(struct flt *pflt, flt_task_run_f *run, void *ud)
 {
     struct flt_priv  *flt = cork_container_of(pflt, struct flt_priv, public);
-    struct flt_task_priv  *task = flt_task_new(flt, run, ud, i);
+    struct flt_task_priv  *task = flt_task_new(flt, run, ud);
     flt_task_deque_push_head(flt, flt->ready, task);
     task = flt_finish_claim(&flt->public, struct flt_task_priv, task);
     return &task->public;
@@ -476,8 +473,7 @@ static void
 flt_pop_and_run_one(struct flt_priv *flt)
 {
     struct flt_task_priv  *task = flt_task_deque_pop_head(flt, flt->ready);
-    DEBUG(3, flt, "Run task %p(%p,%zu)",
-          task->public.run, task->public.ud, task->public.i);
+    DEBUG(3, flt, "Run task %p(%p)", task->public.run, task->public.ud);
     task->state = FLT_TASK_RUNNING;
     flt_task_run(flt, task);
     if (CORK_LIKELY(task->state == FLT_TASK_RUNNING)) {
@@ -856,8 +852,7 @@ flt_fleet_set_context_count(struct flt_fleet *fleet, unsigned int context_count)
 }
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run,
-              void *ud, size_t index)
+flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run, void *ud)
 {
     struct flt_priv  *flt;
     unsigned int  i;
@@ -867,7 +862,7 @@ flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run,
     }
 
     flt = fleet->contexts[0];
-    flt_task_new_scheduled(&flt->public, run, ud, index);
+    flt_task_new_scheduled(&flt->public, run, ud);
     flt->active = true;
     flt_counter_set(&fleet->active_count, 1);
 

@@ -48,13 +48,20 @@ run_native(void)
 
 static flt_task_run_f  add_one;
 
+struct add_state {
+    unsigned long  *result;
+    unsigned long  i;
+};
+
 static void
 add_one(struct flt *flt, struct flt_task *task)
 {
-    if (task->i < max) {
-        unsigned long  *result = task->ud;
-        *result += task->i;
-        task->i++;
+    struct add_state  *state = task->ud;
+    unsigned long  i = state->i;
+    if (i < max) {
+        unsigned long  *result = state->result;
+        *result += i;
+        state->i++;
         flt_task_reschedule(flt, task);
     }
 }
@@ -62,8 +69,9 @@ add_one(struct flt *flt, struct flt_task *task)
 static void
 run_in_fleet(struct flt_fleet *fleet)
 {
+    struct add_state  state = { &result, min };
     result = 0;
-    flt_fleet_run(fleet, add_one, &result, min);
+    flt_fleet_run(fleet, add_one, &state);
 }
 
 static int

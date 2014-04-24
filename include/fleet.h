@@ -89,16 +89,13 @@ flt_task_run_f(struct flt *flt, struct flt_task *task);
 struct flt_task {
     flt_task_run_f  *run;
     void  *ud;
-    size_t  i;
 };
 
 struct flt_task *
-flt_task_new_unscheduled(struct flt *flt, flt_task_run_f *run,
-                         void *ud, size_t i);
+flt_task_new_unscheduled(struct flt *flt, flt_task_run_f *run, void *ud);
 
 struct flt_task *
-flt_task_new_scheduled(struct flt *flt, flt_task_run_f *run,
-                       void *ud, size_t i);
+flt_task_new_scheduled(struct flt *flt, flt_task_run_f *run, void *ud);
 
 void
 flt_task_free(struct flt *flt, struct flt_task *task);
@@ -111,9 +108,9 @@ flt_task_reschedule(struct flt *flt, struct flt_task *task);
 
 FLT_UNUSED
 static FLT_INLINE void
-flt_return_to(struct flt *flt, flt_task_run_f *run, void *ud, size_t i)
+flt_return_to(struct flt *flt, flt_task_run_f *run, void *ud)
 {
-    struct flt_task  task = { run, ud, i };
+    struct flt_task  task = { run, ud };
     return run(flt, &task);
 }
 
@@ -127,7 +124,7 @@ flt_task_add_on_migrate(struct flt *flt, struct flt_task *task,
                         flt_task_migrate_f *migrate, void *ud);
 
 
-typedef void *
+typedef void
 flt_task_finished_f(struct flt *flt, struct flt_task *task, void *ud);
 
 void
@@ -162,7 +159,7 @@ flt_fleet_set_context_count(struct flt_fleet *fleet,
                             unsigned int context_count);
 
 void
-flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run, void *ud, size_t i);
+flt_fleet_run(struct flt_fleet *fleet, flt_task_run_f *run, void *ud);
 
 
 /*-----------------------------------------------------------------------
